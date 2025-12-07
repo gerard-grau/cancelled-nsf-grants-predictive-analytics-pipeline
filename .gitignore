@@ -1,0 +1,21 @@
+# Entorn virtual
+venv/
+
+# Fitxers compilats de Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Dades grans de la Datalake (si no les vols a Git)
+#datalake/
+
+# Airflow: fitxers generats
+airflow/logs/
+airflow/airflow.db
+airflow/airflow.cfg
+
+# Altres
+*.log
+.DS_Store
+Thumbs.db
