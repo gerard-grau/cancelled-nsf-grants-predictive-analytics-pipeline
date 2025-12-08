@@ -4,3 +4,6 @@ airflow users create \
     --lastname Pages \
     --role Admin \
     --email eloipages@gmail.com
+
+
+export MONGO_URI="mongodb://172.27.160.1:27017/"
