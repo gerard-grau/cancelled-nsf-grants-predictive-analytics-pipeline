@@ -1,4 +1,7 @@
-*
+cruz_list/
+legislators/
+terminated_data/
+nsf_grants/nsf_awards_spark/
 
-!.gitignore
-
+/*.csv
+/*.json
