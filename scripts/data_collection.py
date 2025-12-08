@@ -247,7 +247,7 @@ def download_cruz_list(file_path, spark: SparkSession | None = None):
 
 
 if __name__ == "__main__":
-    BASE_DIR = Path(".")
+    BASE_DIR = Path(__file__).parent.parent
     DATALAKE_DIR = BASE_DIR / "datalake"
     LANDING_DIR = DATALAKE_DIR / "landing"
     NSF_DIR = LANDING_DIR / "nsf_grants"
