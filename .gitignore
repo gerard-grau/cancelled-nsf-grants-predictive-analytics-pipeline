@@ -7,9 +7,6 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Dades grans de la Datalake (si no les vols a Git)
-datalake/
-
 # Airflow: fitxers generats
 airflow/logs/
 airflow/airflow.db
