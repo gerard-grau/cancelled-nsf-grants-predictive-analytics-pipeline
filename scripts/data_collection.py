@@ -252,7 +252,7 @@ def download_cruz_list(file_path, spark: Union[SparkSession, None] = None): # Fi
 
 
 
-if __name__ == "__main__":
+def main():
     BASE_DIR = Path(__file__).parent.parent
     DATALAKE_DIR = BASE_DIR / "datalake"
     LANDING_DIR = DATALAKE_DIR / "landing"
@@ -286,3 +286,6 @@ if __name__ == "__main__":
     print(f"Total awards downloaded: {total}")
 
     spark.stop()
+
+if __name__ == "__main__":
+    main()

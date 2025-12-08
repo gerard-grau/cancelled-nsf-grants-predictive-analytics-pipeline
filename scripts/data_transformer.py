@@ -43,7 +43,7 @@ def load_collection_as_pandas(collection_name: str) -> pd.DataFrame:
     return pd.DataFrame(docs)
 
 
-def build_exploitation_dataset(train_ratio: float = 0.8, seed: int = 42):
+def main(train_ratio: float = 0.8, seed: int = 42):
     EXPLOITATION_DIR.mkdir(parents=True, exist_ok=True)
 
     pdf_nsf = load_collection_as_pandas(COLLECTION_NSF_GRANTS)
@@ -131,4 +131,4 @@ def build_exploitation_dataset(train_ratio: float = 0.8, seed: int = 42):
 
 
 if __name__ == "__main__":
-    build_exploitation_dataset()
+    main()
