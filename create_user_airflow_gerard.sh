@@ -1,4 +1,4 @@
-source init_airflow_gerard.sh
+source init_gerard.sh
 
 airflow users create \
     --username gerard_admin \
