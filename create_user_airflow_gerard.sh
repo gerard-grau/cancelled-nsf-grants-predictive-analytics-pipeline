@@ -1,6 +1,10 @@
+source init_airflow_gerard.sh
+
 airflow users create \
-    --username admin \
+    --username gerard_admin \
     --firstname Gerard \
-    --lastname Admin \
+    --lastname Grau \
     --role Admin \
-    --email admin@example.com
+    --email gerardgraugarcia@gmail.com
+
+echo "Airflow Environment Loaded!"
