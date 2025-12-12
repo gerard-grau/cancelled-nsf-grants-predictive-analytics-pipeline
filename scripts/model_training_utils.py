@@ -1,12 +1,19 @@
+"""
+ML Experiment Manager for NSF Grant Prediction
+Handles model training with MLflow tracking and comprehensive metrics for imbalanced datasets.
+"""
+
 from typing import List, Dict, Optional, Callable, Tuple
 
 import mlflow
 import mlflow.spark
 from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql.functions import when, col, udf
+from pyspark.sql.types import DoubleType
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler, StringIndexer, IndexToString
 from pyspark.ml.classification import RandomForestClassifier, GBTClassifier, LogisticRegression
-from pyspark.ml.evaluation import MulticlassClassificationEvaluator
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator, BinaryClassificationEvaluator
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
 
 
@@ -46,19 +53,93 @@ class MLExperimentManager:
         if self.feature_cols is None:
             self.feature_cols = [c for c in self.train_df.columns if c != self.target_col]
     def _build_pipeline(self, classifier) -> Pipeline:
-        """Build Spark ML pipeline."""
-        label_indexer = StringIndexer(inputCol=self.target_col, outputCol="label", handleInvalid="keep")
-        assembler = VectorAssembler(inputCols=self.feature_cols, outputCol="features", handleInvalid="keep")
+        """Build Spark ML pipeline with label indexing, feature assembly, and classifier."""
+        label_indexer = StringIndexer(
+            inputCol=self.target_col, 
+            outputCol="label", 
+            handleInvalid="keep"
+        )
+        assembler = VectorAssembler(
+            inputCols=self.feature_cols, 
+            outputCol="features", 
+            handleInvalid="keep"
+        )
         label_converter = IndexToString(
             inputCol="prediction",
             outputCol="prediction_label",
-            labels=label_indexer.fit(self.train_df).labels if self.train_df is not None else None,
+            labels=label_indexer.fit(self.train_df).labels if self.train_df else None
         )
         return Pipeline(stages=[label_indexer, assembler, classifier, label_converter])
 
-    def _get_evaluator(self):
-        """Get appropriate evaluator."""
-        return MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction", metricName="accuracy")
+    def _calculate_metrics(self, predictions) -> Dict[str, float]:
+        """
+        Calculate comprehensive metrics for imbalanced datasets.
+        
+        Metrics include: accuracy, precision, recall, F1 score, AUC-ROC, AUC-PR
+        """
+        metrics = {}
+        
+        # Standard classification metrics
+        metric_names = {
+            "accuracy": "accuracy",
+            "precision": "weightedPrecision",
+            "recall": "weightedRecall",
+            "f1_score": "f1"
+        }
+        
+        for key, metric_name in metric_names.items():
+            evaluator = MulticlassClassificationEvaluator(
+                labelCol="label", 
+                predictionCol="prediction", 
+                metricName=metric_name
+            )
+            metrics[key] = float(evaluator.evaluate(predictions))
+        
+        # Extract probability for positive class for AUC calculations
+        extract_prob_udf = udf(
+            lambda prob: float(prob[1]) if prob and len(prob) >= 2 else 0.0,
+            DoubleType()
+        )
+        predictions_with_score = predictions.withColumn(
+            "score", 
+            extract_prob_udf(col("probability"))
+        )
+        
+        # AUC metrics (handle potential errors gracefully)
+        auc_metrics = [
+            ("auc_roc", "areaUnderROC"),
+            ("auc_pr", "areaUnderPR")
+        ]
+        
+        for key, metric_name in auc_metrics:
+            try:
+                evaluator = BinaryClassificationEvaluator(
+                    labelCol="label", 
+                    rawPredictionCol="score", 
+                    metricName=metric_name
+                )
+                metrics[key] = float(evaluator.evaluate(predictions_with_score))
+            except Exception:
+                metrics[key] = 0.0
+        
+        return metrics
+    def _apply_class_weights(self, df: DataFrame) -> DataFrame:
+        """Apply class weights to handle imbalanced data."""
+        label_counts = df.groupBy(self.target_col).count().collect()
+        total_samples = df.count()
+        
+        class_weights = {
+            float(row[self.target_col]): total_samples / (2 * row['count'])
+            for row in label_counts
+        }
+        
+        return df.withColumn(
+            "sample_weight",
+            when(col(self.target_col) == 0, class_weights[0.0])
+            .when(col(self.target_col) == 1, class_weights[1.0])
+            .otherwise(1.0)
+        )
+
     def _fit_with_mlflow(
         self,
         classifier,
@@ -67,39 +148,30 @@ class MLExperimentManager:
         train_ratio: float,
         seed: int,
     ) -> Tuple[Pipeline, Dict[str, float]]:
-        """Fit model with MLflow tracking."""
+        """Fit model with MLflow tracking and comprehensive metrics logging."""
         if self.train_df is None:
             raise ValueError("Must call load_data() before training.")
 
-        from pyspark.sql.functions import when, col as spark_col
-        
-        # Calculate class weights for imbalanced data
-        label_counts = self.train_df.groupBy(self.target_col).count().collect()
-        total_samples = self.train_df.count()
-        
-        class_weights = {
-            float(row[self.target_col]): total_samples / (2 * row['count'])
-            for row in label_counts
-        }
-        
-        train_with_weights = self.train_df.withColumn(
-            "sample_weight",
-            when(spark_col(self.target_col) == 0, class_weights[0.0])
-            .when(spark_col(self.target_col) == 1, class_weights[1.0])
-            .otherwise(1.0)
+        # Apply class weights and split data
+        train_with_weights = self._apply_class_weights(self.train_df)
+        train_df, valid_df = train_with_weights.randomSplit(
+            [train_ratio, 1 - train_ratio], 
+            seed=seed
         )
-        
-        train_df, valid_df = train_with_weights.randomSplit([train_ratio, 1 - train_ratio], seed=seed)
 
         pipeline = self._build_pipeline(classifier)
-        evaluator = self._get_evaluator()
 
         with mlflow.start_run(run_name=run_name):
+            # Train with cross-validation if parameter grid provided
             if param_grid is not None:
                 cv = CrossValidator(
                     estimator=pipeline,
                     estimatorParamMaps=param_grid.build(),
-                    evaluator=evaluator,
+                    evaluator=MulticlassClassificationEvaluator(
+                        labelCol="label", 
+                        predictionCol="prediction", 
+                        metricName="accuracy"
+                    ),
                     numFolds=3,
                     seed=seed,
                 )
@@ -107,18 +179,20 @@ class MLExperimentManager:
             else:
                 best_model = pipeline.fit(train_df)
 
+            # Evaluate and log metrics
             valid_predictions = best_model.transform(valid_df)
-            accuracy = evaluator.evaluate(valid_predictions)
-            metrics = {"valid_accuracy": float(accuracy)}
-
+            calculated_metrics = self._calculate_metrics(valid_predictions)
+            metrics = {f"valid_{k}": v for k, v in calculated_metrics.items()}
             mlflow.log_metrics(metrics)
             
-            for p in classifier.extractParamMap():
+            # Log hyperparameters
+            for param in classifier.extractParamMap():
                 try:
-                    mlflow.log_param(p.name, classifier.getOrDefault(p))
+                    mlflow.log_param(param.name, classifier.getOrDefault(param))
                 except Exception:
                     pass
 
+            # Save model
             mlflow.spark.log_model(best_model, artifact_path="model")
 
         return best_model, metrics
@@ -203,13 +277,18 @@ class MLExperimentManager:
 
         return self._fit_with_mlflow(gbt, run_name, param_grid, train_ratio, seed)
     def evaluate_on_test(self, model: Pipeline) -> Dict[str, float]:
-        """Evaluate model on test set."""
+        """Evaluate model on test set with comprehensive metrics."""
         if self.test_df is None:
             raise ValueError("No test_df loaded. Pass test_loader to load_data().")
 
-        test_df = self.test_df.drop("sample_weight") if "sample_weight" in self.test_df.columns else self.test_df
+        # Remove sample_weight if present
+        test_df = (
+            self.test_df.drop("sample_weight") 
+            if "sample_weight" in self.test_df.columns 
+            else self.test_df
+        )
         
         predictions = model.transform(test_df)
-        accuracy = self._get_evaluator().evaluate(predictions)
+        calculated_metrics = self._calculate_metrics(predictions)
         
-        return {"test_accuracy": float(accuracy)}
+        return {f"test_{k}": v for k, v in calculated_metrics.items()}
