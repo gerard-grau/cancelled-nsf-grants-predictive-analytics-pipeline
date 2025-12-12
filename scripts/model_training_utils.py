@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional, Callable, Tuple
 
 import mlflow
+import mlflow.spark
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.ml import Pipeline
 from pyspark.ml.feature import VectorAssembler, StringIndexer, IndexToString
@@ -117,6 +118,8 @@ class MLExperimentManager:
                     mlflow.log_param(p.name, classifier.getOrDefault(p))
                 except Exception:
                     pass
+
+            mlflow.spark.log_model(best_model, artifact_path="model")
 
         return best_model, metrics
     def train_random_forest(
