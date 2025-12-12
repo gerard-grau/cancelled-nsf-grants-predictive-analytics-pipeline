@@ -18,3 +18,5 @@ airflow/airflow.cfg
 *.log
 .DS_Store
 Thumbs.db
+
+scripts/mlruns
