@@ -27,7 +27,7 @@ class MLExperimentManager:
         feature_cols: Optional[List[str]],
         experiment_name: str,
         tracking_uri: str = "file:./mlruns",
-        problem_type: str = "multiclass",
+        problem_type: str = "binary",
     ):
         self.spark = spark
         self.target_col = target_col
@@ -53,47 +53,42 @@ class MLExperimentManager:
         if self.feature_cols is None:
             self.feature_cols = [c for c in self.train_df.columns if c != self.target_col]
     def _build_pipeline(self, classifier) -> Pipeline:
-        """Build Spark ML pipeline with label indexing, feature assembly, and classifier."""
-        label_indexer = StringIndexer(
-            inputCol=self.target_col, 
-            outputCol="label", 
-            handleInvalid="keep"
+        """Build Spark ML pipeline with feature assembly and classifier for binary classification."""
+        # For binary classification with numeric labels (0/1), skip StringIndexer
+        # Rename target column to "label" for classifier
+        from pyspark.ml.feature import SQLTransformer
+        
+        label_renamer = SQLTransformer(
+            statement=f"SELECT *, CAST({self.target_col} AS DOUBLE) AS label FROM __THIS__"
         )
+        
         assembler = VectorAssembler(
             inputCols=self.feature_cols, 
             outputCol="features", 
             handleInvalid="keep"
         )
-        label_converter = IndexToString(
-            inputCol="prediction",
-            outputCol="prediction_label",
-            labels=label_indexer.fit(self.train_df).labels if self.train_df else None
-        )
-        return Pipeline(stages=[label_indexer, assembler, classifier, label_converter])
+        
+        return Pipeline(stages=[label_renamer, assembler, classifier])
 
     def _calculate_metrics(self, predictions) -> Dict[str, float]:
         """
         Calculate comprehensive metrics for imbalanced datasets.
         
+        For binary classification, computes metrics for the positive class (label=1).
         Metrics include: accuracy, precision, recall, F1 score, AUC-ROC, AUC-PR
         """
         metrics = {}
         
-        # Standard classification metrics
-        metric_names = {
-            "accuracy": "accuracy",
-            "precision": "weightedPrecision",
-            "recall": "weightedRecall",
-            "f1_score": "f1"
-        }
+        # Convert to pandas for binary classification metrics
+        pred_pd = predictions.select("label", "prediction").toPandas()
         
-        for key, metric_name in metric_names.items():
-            evaluator = MulticlassClassificationEvaluator(
-                labelCol="label", 
-                predictionCol="prediction", 
-                metricName=metric_name
-            )
-            metrics[key] = float(evaluator.evaluate(predictions))
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+        
+        # Binary metrics for positive class (label=1)
+        metrics["accuracy"] = float(accuracy_score(pred_pd["label"], pred_pd["prediction"]))
+        metrics["precision"] = float(precision_score(pred_pd["label"], pred_pd["prediction"], pos_label=1, zero_division=0))
+        metrics["recall"] = float(recall_score(pred_pd["label"], pred_pd["prediction"], pos_label=1, zero_division=0))
+        metrics["f1_score"] = float(f1_score(pred_pd["label"], pred_pd["prediction"], pos_label=1, zero_division=0))
         
         # Extract probability for positive class for AUC calculations
         extract_prob_udf = udf(
@@ -164,13 +159,14 @@ class MLExperimentManager:
         with mlflow.start_run(run_name=run_name):
             # Train with cross-validation if parameter grid provided
             if param_grid is not None:
+                # Use AUC-ROC for imbalanced data optimization
                 cv = CrossValidator(
                     estimator=pipeline,
                     estimatorParamMaps=param_grid.build(),
-                    evaluator=MulticlassClassificationEvaluator(
+                    evaluator=BinaryClassificationEvaluator(
                         labelCol="label", 
-                        predictionCol="prediction", 
-                        metricName="accuracy"
+                        rawPredictionCol="rawPrediction", 
+                        metricName="areaUnderROC"
                     ),
                     numFolds=3,
                     seed=seed,
@@ -203,6 +199,9 @@ class MLExperimentManager:
         seed: int = 42,
         num_trees: int = 100,
         max_depth: int = 10,
+        max_bins: int = 32,
+        min_instances_per_node: int = 1,
+        subsampling_rate: float = 1.0,
         param_grid_dict: Optional[Dict[str, List]] = None,
     ) -> Tuple[Pipeline, Dict[str, float]]:
         """Train Random Forest classifier."""
@@ -212,6 +211,9 @@ class MLExperimentManager:
             weightCol="sample_weight",
             numTrees=num_trees,
             maxDepth=max_depth,
+            maxBins=max_bins,
+            minInstancesPerNode=min_instances_per_node,
+            subsamplingRate=subsampling_rate,
             seed=seed,
         )
 
@@ -230,6 +232,7 @@ class MLExperimentManager:
         seed: int = 42,
         reg_param: float = 0.0,
         elastic_net_param: float = 0.0,
+        max_iter: int = 100,
         param_grid_dict: Optional[Dict[str, List]] = None,
     ) -> Tuple[Pipeline, Dict[str, float]]:
         """Train Logistic Regression classifier."""
@@ -239,7 +242,7 @@ class MLExperimentManager:
             weightCol="sample_weight",
             regParam=reg_param,
             elasticNetParam=elastic_net_param,
-            maxIter=100,
+            maxIter=max_iter,
         )
 
         param_grid = None
@@ -257,6 +260,9 @@ class MLExperimentManager:
         seed: int = 42,
         max_iter: int = 50,
         max_depth: int = 5,
+        step_size: float = 0.1,
+        max_bins: int = 32,
+        min_instances_per_node: int = 1,
         param_grid_dict: Optional[Dict[str, List]] = None,
     ) -> Tuple[Pipeline, Dict[str, float]]:
         """Train Gradient Boosted Trees classifier."""
@@ -266,6 +272,9 @@ class MLExperimentManager:
             weightCol="sample_weight",
             maxIter=max_iter,
             maxDepth=max_depth,
+            stepSize=step_size,
+            maxBins=max_bins,
+            minInstancesPerNode=min_instances_per_node,
             seed=seed,
         )
 
