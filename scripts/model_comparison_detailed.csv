@@ -1,4 +1,4 @@
 Model,Val Accuracy,Test Accuracy,Precision,Recall,F1-Score,ROC AUC
-Random Forest,0.9392,0.9403,0.0649,0.1923,0.0971,0.5763
-Gradient Boosted Trees,0.7664,0.7784,0.0210,0.2692,0.0390,0.5735
-Logistic Regression,0.5280,0.5145,0.0185,0.5385,0.0357,0.6319
+Random Forest,0.9344,0.9294,0.0625,0.2308,0.0984,0.7263
+Gradient Boosted Trees,0.8776,0.8812,0.0608,0.4231,0.1063,0.7159
+Logistic Regression,0.8952,0.8838,0.0414,0.2692,0.0718,0.7052
