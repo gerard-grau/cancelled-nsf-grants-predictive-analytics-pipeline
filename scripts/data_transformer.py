@@ -14,7 +14,8 @@ from config import (
     COLLECTION_NSF_GRANTS,
     COLLECTION_TERMINATED_GRANTS,
     COLLECTION_CRUZ_LIST,
-    COLLECTION_LEGISLATORS,  # 🔴 nou import
+    COLLECTION_LEGISLATORS,
+    COLLECTION_FLAGGED_WORDS,
 )
 
 BASE_DIR = Path(__file__).parent.parent
@@ -131,6 +132,75 @@ def make_party_lookup(df_terms: pd.DataFrame):
     return _get_party_for_type
 
 
+def compute_flagged_word_features(pdf_nsf: pd.DataFrame, flagged_words_set: set) -> pd.DataFrame:
+    """
+    Compute text analysis features based on flagged words in abstract and title.
+    Returns a DataFrame with 6 new columns:
+    - flagged_word_count_abstract: Total occurrences in abstract
+    - flagged_word_unique_abstract: Number of distinct flagged words in abstract
+    - flagged_word_ratio_abstract: flagged_count / total_word_count in abstract
+    - flagged_word_count_title: Total occurrences in title
+    - has_flagged_words: Boolean indicator (any flagged word present)
+    - flagged_word_diversity_score: unique / count (0 if count=0)
+    """
+    import re
+    
+    def analyze_text(text: str, flagged_words: set) -> tuple:
+        """Returns (count, unique_count, ratio)"""
+        if pd.isna(text) or not text:
+            return (0, 0, 0.0)
+        
+        # Normalize to lowercase
+        text_lower = text.lower()
+        
+        # Count total words
+        words = re.findall(r'\b\w+\b', text_lower)
+        total_words = len(words)
+        
+        if total_words == 0:
+            return (0, 0, 0.0)
+        
+        # Find flagged words with word boundaries
+        flagged_found = []
+        for word in words:
+            if word in flagged_words:
+                flagged_found.append(word)
+        
+        count = len(flagged_found)
+        unique_count = len(set(flagged_found))
+        ratio = count / total_words if total_words > 0 else 0.0
+        
+        return (count, unique_count, ratio)
+    
+    # Extract abstract and title columns
+    abstracts = pdf_nsf.get('abstract', pd.Series([None] * len(pdf_nsf)))
+    titles = pdf_nsf.get('title', pd.Series([None] * len(pdf_nsf)))
+    
+    # Analyze abstract
+    abstract_results = abstracts.apply(lambda x: analyze_text(x, flagged_words_set))
+    pdf_nsf['flagged_word_count_abstract'] = abstract_results.apply(lambda x: x[0])
+    pdf_nsf['flagged_word_unique_abstract'] = abstract_results.apply(lambda x: x[1])
+    pdf_nsf['flagged_word_ratio_abstract'] = abstract_results.apply(lambda x: x[2])
+    
+    # Analyze title
+    title_results = titles.apply(lambda x: analyze_text(x, flagged_words_set))
+    pdf_nsf['flagged_word_count_title'] = title_results.apply(lambda x: x[0])
+    
+    # Boolean indicator
+    pdf_nsf['has_flagged_words'] = (
+        (pdf_nsf['flagged_word_count_abstract'] > 0) | 
+        (pdf_nsf['flagged_word_count_title'] > 0)
+    )
+    
+    # Diversity score
+    total_count = pdf_nsf['flagged_word_count_abstract'] + pdf_nsf['flagged_word_count_title']
+    total_unique = pdf_nsf['flagged_word_unique_abstract']  # We only track unique in abstract
+    pdf_nsf['flagged_word_diversity_score'] = total_unique / total_count.replace(0, 1)
+    pdf_nsf.loc[total_count == 0, 'flagged_word_diversity_score'] = 0.0
+    
+    return pdf_nsf
+
+
 def main(train_ratio: float = 0.8, seed: int = 42):
     EXPLOITATION_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -140,11 +210,20 @@ def main(train_ratio: float = 0.8, seed: int = 42):
     pdf_nsf = load_collection_as_pandas(COLLECTION_NSF_GRANTS)
     pdf_cruz = load_collection_as_pandas(COLLECTION_CRUZ_LIST)
     pdf_term = load_collection_as_pandas(COLLECTION_TERMINATED_GRANTS)
-    pdf_leg = load_collection_as_pandas(COLLECTION_LEGISLATORS)  # 🔴 nova col·lecció
+    pdf_leg = load_collection_as_pandas(COLLECTION_LEGISLATORS)
+    pdf_flagged = load_collection_as_pandas(COLLECTION_FLAGGED_WORDS)
 
     if pdf_nsf.empty:
         print("NSF grants collection is empty, nothing to do.")
         sys.exit(1)
+    
+    # -----------------------------------------------------------------
+    # 🔹 Prepare flagged words set for text analysis
+    # -----------------------------------------------------------------
+    flagged_words_set = set()
+    if not pdf_flagged.empty and "flagged_word" in pdf_flagged.columns:
+        flagged_words_set = set(pdf_flagged["flagged_word"].dropna().tolist())
+        print(f"✅ Loaded {len(flagged_words_set)} flagged words for text analysis")
 
     pdf_nsf["award_id"] = pdf_nsf["award_id"].astype(str)
 
@@ -228,6 +307,17 @@ def main(train_ratio: float = 0.8, seed: int = 42):
     )
 
     # -----------------------------------------------------------------
+    # 🔹 Compute flagged word features
+    # -----------------------------------------------------------------
+    if flagged_words_set:
+        print("🔍 Computing flagged word features...")
+        pdf_feat = compute_flagged_word_features(pdf_feat, flagged_words_set)
+        print(f"   ✓ Added 6 flagged word features")
+        print(f"   ✓ Grants with flagged words: {pdf_feat['has_flagged_words'].sum()} / {len(pdf_feat)}")
+    else:
+        print("⚠️  No flagged words loaded, skipping text analysis features")
+
+    # -----------------------------------------------------------------
     # 🔹 Neteja i tipatge de columnes base
     # -----------------------------------------------------------------
     if "year" in pdf_feat.columns:
@@ -255,8 +345,8 @@ def main(train_ratio: float = 0.8, seed: int = 42):
 
     df_train, df_test = df_all.randomSplit([train_ratio, 1.0 - train_ratio], seed=seed)
 
-    df_train.write.format("delta").mode("overwrite").partitionBy("year").save(str(TRAIN_DELTA_DIR))
-    df_test.write.format("delta").mode("overwrite").partitionBy("year").save(str(TEST_DELTA_DIR))
+    df_train.write.format("delta").mode("overwrite").option("overwriteSchema", "true").partitionBy("year").save(str(TRAIN_DELTA_DIR))
+    df_test.write.format("delta").mode("overwrite").option("overwriteSchema", "true").partitionBy("year").save(str(TEST_DELTA_DIR))
 
     print(f"Train Delta saved at: {TRAIN_DELTA_DIR}")
     print(f"Test Delta saved at:  {TEST_DELTA_DIR}")
