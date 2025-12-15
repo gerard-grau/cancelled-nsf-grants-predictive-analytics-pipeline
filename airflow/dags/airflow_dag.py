@@ -53,6 +53,13 @@ with DAG(
             "python collect_legislators.py"
         ),
     )
+    collect_flagged_words = BashOperator(
+        task_id="collect_flagged_words",
+        bash_command=(
+            f"cd {PROJECT_SCRIPTS_DIR} && "
+            "python collect_flagged_words.py"
+        ),
+    )
 
     # -------- FORMATEIG → MONGO --------
     format_awards = BashOperator(
@@ -87,7 +94,14 @@ with DAG(
         ),
     )
 
-    # -------- TRANSFORMACIÓ MONGO → DELTA --------
+    format_flagged_words = BashOperator(
+        task_id="format_flagged_words",
+        bash_command=(
+            f"cd {PROJECT_SCRIPTS_DIR} && "
+            "python format_flagged_words.py"
+        ),
+    )
+        # -------- TRANSFORMACIÓ MONGO → DELTA --------
     mongo_to_delta = BashOperator(
         task_id="mongo_to_delta",
         bash_command=(
@@ -105,5 +119,5 @@ with DAG(
     collect_terminated >> format_terminated
     collect_cruz_list >> format_cruz_list
     collect_legislators >> format_legislators
-
-    [format_awards, format_terminated, format_cruz_list, format_legislators] >> mongo_to_delta
+    collect_flagged_words >> format_flagged_words
+    [format_awards, format_terminated, format_cruz_list, format_legislators,format_flagged_words] >> mongo_to_delta
