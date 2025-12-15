@@ -8,12 +8,6 @@ __pycache__/
 *.pyd
 
 
-datalake/
-# Airflow: fitxers generats
-airflow/logs/
-airflow/airflow.db
-airflow/airflow.cfg
-
 # Altres
 *.log
 .DS_Store
