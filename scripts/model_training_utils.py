@@ -3,18 +3,86 @@ ML Experiment Manager for NSF Grant Prediction
 Handles model training with MLflow tracking and comprehensive metrics for imbalanced datasets.
 """
 
-from typing import List, Dict, Optional, Callable, Tuple
+from typing import Optional, Callable, Tuple
+import random
 
 import mlflow
 import mlflow.spark
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import when, col, udf
+from pyspark.sql.functions import when, col, udf, lit, rand
 from pyspark.sql.types import DoubleType
-from pyspark.ml import Pipeline
+from pyspark.ml import Pipeline, Transformer
 from pyspark.ml.feature import VectorAssembler, StringIndexer, IndexToString
 from pyspark.ml.classification import RandomForestClassifier, GBTClassifier, LogisticRegression
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator, BinaryClassificationEvaluator
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+from pyspark.ml.param.shared import HasInputCols, HasOutputCol, Param
+from pyspark.ml.util import DefaultParamsReadable, DefaultParamsWritable
+
+
+class DummyClassifier(Transformer, HasInputCols, HasOutputCol, DefaultParamsReadable, DefaultParamsWritable):
+    """
+    Baseline classifier for comparison with ML models.
+    Supports three strategies: majority, random, and stratified.
+    """
+
+    def __init__(self, strategy: str = "majority", seed: int = 42):
+        super().__init__()
+        self._strategy = strategy
+        self._seed = seed
+        self._majority_class = None
+        self._class_distribution = None
+    
+    def set_majority_class(self, value: float):
+        """Set the majority class for 'majority' strategy."""
+        self._majority_class = value
+        return self
+    
+    def set_class_distribution(self, value: dict[float, float]):
+        """Set class distribution for 'stratified' strategy."""
+        self._class_distribution = value
+        return self
+
+    def _transform(self, dataset: DataFrame) -> DataFrame:
+        """Apply baseline prediction."""
+        strategy = self._strategy
+        seed_val = self._seed
+        
+        if strategy == "majority":
+            # Always predict the majority class
+            majority = self._majority_class if self._majority_class is not None else 0.0
+            result = dataset.withColumn("prediction", lit(float(majority)))
+            result = result.withColumn("probability", lit([1.0 - majority, majority]))
+            result = result.withColumn("rawPrediction", lit([0.0, 0.0]))
+            
+        elif strategy == "random":
+            # Random prediction with uniform distribution
+            result = dataset.withColumn("rand_val", rand(seed_val))
+            result = result.withColumn(
+                "prediction",
+                when(col("rand_val") < 0.5, 0.0).otherwise(1.0)
+            )
+            result = result.withColumn("probability", lit([0.5, 0.5]))
+            result = result.withColumn("rawPrediction", lit([0.0, 0.0]))
+            result = result.drop("rand_val")
+            
+        elif strategy == "stratified":
+            # Stratified random based on class distribution
+            class_dist = self._class_distribution if self._class_distribution else {0.0: 0.5, 1.0: 0.5}
+            prob_positive = class_dist.get(1.0, 0.5)
+            
+            result = dataset.withColumn("rand_val", rand(seed_val))
+            result = result.withColumn(
+                "prediction",
+                when(col("rand_val") < prob_positive, 1.0).otherwise(0.0)
+            )
+            result = result.withColumn("probability", lit([1.0 - prob_positive, prob_positive]))
+            result = result.withColumn("rawPrediction", lit([0.0, 0.0]))
+            result = result.drop("rand_val")
+        else:
+            raise ValueError(f"Unknown strategy: {strategy}")
+        
+        return result
 
 
 class MLExperimentManager:
@@ -24,7 +92,7 @@ class MLExperimentManager:
         self,
         spark: SparkSession,
         target_col: str,
-        feature_cols: Optional[List[str]],
+        feature_cols: Optional[list[str]],
         experiment_name: str,
         tracking_uri: str = "file:./mlruns",
         problem_type: str = "binary",
@@ -70,7 +138,7 @@ class MLExperimentManager:
         
         return Pipeline(stages=[label_renamer, assembler, classifier])
 
-    def _calculate_metrics(self, predictions) -> Dict[str, float]:
+    def _calculate_metrics(self, predictions) -> dict[str, float]:
         """
         Calculate comprehensive metrics for imbalanced datasets.
         
@@ -142,7 +210,7 @@ class MLExperimentManager:
         param_grid: Optional[ParamGridBuilder],
         train_ratio: float,
         seed: int,
-    ) -> Tuple[Pipeline, Dict[str, float]]:
+    ) -> Tuple[Pipeline, dict[str, float]]:
         """Fit model with MLflow tracking and comprehensive metrics logging."""
         if self.train_df is None:
             raise ValueError("Must call load_data() before training.")
@@ -192,6 +260,92 @@ class MLExperimentManager:
             mlflow.spark.log_model(best_model, artifact_path="model")
 
         return best_model, metrics
+
+    def train_baseline(
+        self,
+        strategy: str = "majority",
+        run_name: str = "baseline_model",
+        train_ratio: float = 0.8,
+        seed: int = 42,
+    ) -> Tuple[Pipeline, dict[str, float]]:
+        """
+        Train a baseline classifier for comparison.
+        
+        Args:
+            strategy: Prediction strategy - 'majority', 'random', or 'stratified'
+                - majority: Always predict the most common class
+                - random: Random uniform prediction
+                - stratified: Random prediction based on class distribution
+            run_name: MLflow run name
+            train_ratio: Train/validation split ratio
+            seed: Random seed
+            
+        Returns:
+            Tuple of (pipeline, validation_metrics)
+        """
+        if self.train_df is None:
+            raise ValueError("Must call load_data() before training.")
+
+        # Split data (no need for class weights in baseline)
+        train_df, valid_df = self.train_df.randomSplit(
+            [train_ratio, 1 - train_ratio], 
+            seed=seed
+        )
+
+        # Calculate class statistics for baseline strategies
+        if strategy == "majority":
+            # Find majority class
+            class_counts = train_df.groupBy(self.target_col).count().collect()
+            majority_class = max(class_counts, key=lambda x: x['count'])[self.target_col]
+            dummy = DummyClassifier(strategy="majority", seed=seed)
+            dummy.set_majority_class(float(majority_class))
+            
+        elif strategy == "stratified":
+            # Calculate class distribution
+            class_counts = train_df.groupBy(self.target_col).count().collect()
+            total = sum(row['count'] for row in class_counts)
+            class_dist = {
+                float(row[self.target_col]): row['count'] / total 
+                for row in class_counts
+            }
+            dummy = DummyClassifier(strategy="stratified", seed=seed)
+            dummy.set_class_distribution(class_dist)
+            
+        else:  # random
+            dummy = DummyClassifier(strategy="random", seed=seed)
+
+        # Build pipeline with label renaming
+        from pyspark.ml.feature import SQLTransformer
+        
+        label_renamer = SQLTransformer(
+            statement=f"SELECT *, CAST({self.target_col} AS DOUBLE) AS label FROM __THIS__"
+        )
+        
+        pipeline = Pipeline(stages=[label_renamer, dummy])
+
+        with mlflow.start_run(run_name=run_name):
+            # Train (fit is minimal for baseline)
+            model = pipeline.fit(train_df)
+            
+            # Evaluate
+            valid_predictions = model.transform(valid_df)
+            calculated_metrics = self._calculate_metrics(valid_predictions)
+            metrics = {f"valid_{k}": v for k, v in calculated_metrics.items()}
+            
+            # Log metrics and parameters
+            mlflow.log_metrics(metrics)
+            mlflow.log_param("strategy", strategy)
+            mlflow.log_param("model_type", "baseline")
+            mlflow.log_param("seed", seed)
+            
+            # Tag as baseline
+            mlflow.set_tag("baseline", "true")
+            
+            # Save model
+            mlflow.spark.log_model(model, artifact_path="model")
+
+        return model, metrics
+
     def train_random_forest(
         self,
         run_name: str = "rf_model",
@@ -202,8 +356,8 @@ class MLExperimentManager:
         max_bins: int = 32,
         min_instances_per_node: int = 1,
         subsampling_rate: float = 1.0,
-        param_grid_dict: Optional[Dict[str, List]] = None,
-    ) -> Tuple[Pipeline, Dict[str, float]]:
+        param_grid_dict: Optional[dict[str, list]] = None,
+    ) -> Tuple[Pipeline, dict[str, float]]:
         """Train Random Forest classifier."""
         rf = RandomForestClassifier(
             featuresCol="features",
@@ -233,8 +387,8 @@ class MLExperimentManager:
         reg_param: float = 0.0,
         elastic_net_param: float = 0.0,
         max_iter: int = 100,
-        param_grid_dict: Optional[Dict[str, List]] = None,
-    ) -> Tuple[Pipeline, Dict[str, float]]:
+        param_grid_dict: Optional[dict[str, list]] = None,
+    ) -> Tuple[Pipeline, dict[str, float]]:
         """Train Logistic Regression classifier."""
         lr = LogisticRegression(
             featuresCol="features",
@@ -263,8 +417,8 @@ class MLExperimentManager:
         step_size: float = 0.1,
         max_bins: int = 32,
         min_instances_per_node: int = 1,
-        param_grid_dict: Optional[Dict[str, List]] = None,
-    ) -> Tuple[Pipeline, Dict[str, float]]:
+        param_grid_dict: Optional[dict[str, list]] = None,
+    ) -> Tuple[Pipeline, dict[str, float]]:
         """Train Gradient Boosted Trees classifier."""
         gbt = GBTClassifier(
             featuresCol="features",
@@ -285,7 +439,7 @@ class MLExperimentManager:
                 param_grid = param_grid.addGrid(getattr(gbt, param_name), values)
 
         return self._fit_with_mlflow(gbt, run_name, param_grid, train_ratio, seed)
-    def evaluate_on_test(self, model: Pipeline) -> Dict[str, float]:
+    def evaluate_on_test(self, model: Pipeline) -> dict[str, float]:
         """Evaluate model on test set with comprehensive metrics."""
         if self.test_df is None:
             raise ValueError("No test_df loaded. Pass test_loader to load_data().")
