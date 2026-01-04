@@ -1,0 +1,231 @@
+\documentclass[12pt, a4paper]{article}
+
+% --- Idioma i codificació ---
+\usepackage{fontspec}
+\usepackage[catalan]{babel}
+\usepackage{graphicx}
+\usepackage{svg} % només si inclous SVG directament
+% --- Format bàsic ---
+\usepackage[margin=1in]{geometry}
+\usepackage{parskip}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1em}
+
+% --- Figures i taules ---
+\usepackage{graphicx}
+\usepackage[export]{adjustbox}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{wrapfig}
+\usepackage{multirow}
+\usepackage{multicol}
+\usepackage{tabularray}
+\usepackage{booktabs}
+\usepackage{colortbl}
+
+% --- Matemàtiques ---
+\usepackage{amsmath}
+
+% --- Llistes ---
+\usepackage{enumitem}
+
+% --- Capçaleres i peus ---
+\usepackage{fancyhdr}
+\fancyhf{}
+\rhead{\leftmark}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\pagestyle{fancy}
+
+% --- Codi font ---
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{pythonhighlight}
+\usepackage{matlab-prettifier}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% --- Document ---
+\begin{document}
+
+\begin{figure}[H]
+    \centering
+    \vspace*{1.25cm}
+    \includegraphics[scale=0.10]{Logo_UPC.png}\\[1cm]
+\end{figure}
+
+\vfill
+\begin{center}
+{\large\textbf{BDA}}\\[4mm]
+{\Large\textbf{Pràctica 2}}\\[8mm]
+\hrule
+\vspace*{5mm}
+{\huge\textbf{Predicció de les subvencions NSF que cancelarà en Trump}}\\[10mm]
+\hrule
+\vspace*{8mm}
+\vfill
+\textbf{\large Eloi Pagès i Gerard Grau}\\[3mm]
+\textbf{\large Desembre 2025}
+\end{center}
+
+\newpage
+\tableofcontents
+\newpage
+
+
+
+% ============================================================
+\section{Introducció}
+Les subvencions de la National Science Foundation (NSF) són un element indispensable per a molts laboratoris dels Estats Units. Cada any s’aproven al voltant de 12.000 noves subvencions, que permeten finançar centres de recerca arreu del país.
+
+A l’abril de 2025, l’administració Trump va decidir cancel·lar una part significativa d’aquestes subvencions, al·legant que afavorien polítiques de diversitat, igualtat, col·lectius minoritaris o com va anomenar en Cruz, "Woke grants".
+
+L’objectiu del nostre projecte és desenvolupar un model matemàtic capaç de predir quines subvencions tenen una probabilitat més elevada de ser cancel·lades en cas que Donald Trump torni a iniciar un nou episodi massiu de cancel·lacions.
+
+\subsection{Dataset principal}
+Aquesta secció té com objectiu ilustrar les dades utilitzades.
+\subsubsection{Resum}
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{@{}p{3.4cm}p{6.6cm}p{3.0cm}@{}}
+\toprule
+\textbf{Dataset} & \textbf{Descripció} & \textbf{Format}\\
+\midrule
+NSF awards &
+Conjunt complet de subvencions aprovades per la NSF entre 2013 i 2025 &
+JSON \\
+
+Cruz list &
+Llista de subvencions considerades com "woke" per Cruz. &
+CSV  \\
+
+Legislators historical &
+Informació de representants i senadors dels EUA per estat i any.
+&
+JSON \\
+
+Flagged words &
+Conjunt de paraules clau en les que les subvencions no es poden basar segons en Trump &
+CSV  \\
+
+NSF terminations &
+Registre de subvencions cancel·lades anticipadament per la NSF en el mandat trump &
+CSV\\
+\bottomrule
+\end{tabular}
+\caption{Datasets utilitzats en el projecte.}
+\end{table}
+
+\subsubsection{NSF Awards}
+Aquest dataset conté, en format JSON, el conjunt de subvencions concedides per la \textit{National Science Foundation} entre els anys 2013 i 2025. Per a cada grant s’hi inclou l’identificador oficial, així com informació descriptiva rellevant, com ara el títol, l’abstract, la institució beneficiària, el projecte associat, el nom del \textit{Principal Investigator} (PI) i la quantitat econòmica concedida, entre d’altres.
+
+\subsubsection{Cruz List}
+Aquest dataset, en format CSV, correspon a la llista publicada pel senador Ted Cruz de les subvencions de la NSF que ell va considerar ideològicament sensibles. A més de l’identificador de la subvenció, el conjunt de dades inclou informació addicional com el motiu pel qual cada grant va ser classificada com a “woke” i altres observacions específiques.
+
+\subsubsection{Legislators Historical}
+Atès que el context polític pot tenir un paper rellevant en les decisions de cancel·lació, aquest dataset en format JSON proporciona informació històrica sobre els representants i senadors dels Estats Units, incloent-hi el partit polític i el període temporal durant el qual van exercir el càrrec.
+
+\subsubsection{NSF Terminations}
+Aquest dataset, en format CSV, conté els identificadors de les subvencions de la NSF que van ser cancel·lades per l’administració Trump a l’abril de 2025. Cal destacar que aquestes cancel·lacions no s’han publicat oficialment de manera centralitzada, sinó que han estat estimades a partir de diverses fonts i anàlisis independents, que han donat lloc a aquest conjunt de dades agregat.
+
+\subsubsection{Flagged Words}
+Finalment, aquest dataset consisteix en una llista de paraules clau associades a conceptes de diversitat, gènere i minories, utilitzada per extreure característiques textuals dels títols i abstracts de les subvencions. La seva incorporació resulta clau perquè el model pugui captar patrons semàntics relacionats amb els criteris ideològics que podrien influir en les decisions de cancel·lació.
+
+
+\section{Data Pipeline}
+Un cop enteses les dades, expliquem com hem construit la pipeline per poder entrenar de manera ràpida els nostres models predictius.
+\subsection{Landing zone}
+
+La \textit{landing zone} és la capa més baixa del nostre \textit{data lake} i té com a objectiu emmagatzemar les dades de la manera més fidel possible a la font original. Les dades arriben a la \textit{landing zone} mitjançant scripts de tipus \texttt{collect}, encarregats de descarregar informació de diferents orígens i guardar-la dins del \textit{data lake}.
+
+Les dades de Awards les extraiem de la API oficial mitjançant el seu script. Al ser una API del govern triga molt a donar resposta i està limitada a 25 respostes per crida. Donat que volen descarregar més de 150 000 subvencions, aquest script triga aproximadament unes 6 hores en correr. 
+
+El dataset de flagged words, com no té link de descàrrega, el seu \texttt{collect} copia el fitxer del local a la landing zone.
+
+La resta de dades les descarreguem directament d'un link de descàrrega a internet mitjançant funcions de python.
+
+\subsection{Formatted zone}
+
+La \textit{formatted zone} conté les dades ja processades i normalitzades, llestes per ser utilitzades de manera consistent en fases posteriors d’anàlisi o modelatge. Aquesta zona s’alimenta exclusivament de la \textit{landing zone} mitjançant scripts de tipus \texttt{formatter}, que llegeixen les dades en brut i hi apliquen una sèrie de transformacions estructurals i semàntiques.
+
+En tots els datasets, el procés de formatatge segueix un patró comú. A partir de les dades emmagatzemades a la \textit{landing zone}, els scripts \texttt{formatter} estandarditzen els noms de les columnes, normalitzen els tipus de dades (dates, valors numèrics i booleans), tracten valors nuls o inconsistents i eliminen duplicats quan és necessari. A més, s’hi afegeixen camps de metadades, com la data de formatatge, per facilitar la traçabilitat. Un cop aplicades aquestes transformacions, les dades es carreguen a MongoDB, que actua com a repositori de la \textit{formatted zone}.
+
+En el cas de la \textit{Cruz List}, les dades formatades s’emmagatzemen en una col·lecció específica de MongoDB, amb una estructura orientada a facilitar l’encreuament amb altres datasets de subvencions. Abans de la inserció, la col·lecció es buida per garantir consistència, i es creen índexs sobre camps clau com l’identificador de la subvenció, permetent cerques ràpides i agregacions eficients.
+
+El dataset de \textit{flagged words} es desa en una col·lecció lleugera. La col·lecció conté únicament la paraula normalitzada i metadades associades, i incorpora un índex sobre el camp principal per optimitzar operacions de cerca i coincidència.
+
+Pel que fa al conjunt de dades de \textit{legislators}, es manté l’estructura original del dataset, aprofitant el model documental de MongoDB per conservar informació. Les dades es guarden com a documents complets i s’indexa l’identificador principal del legislador per facilitar enllaços amb altres col·leccions.
+
+Finalment, el dataset de \textit{terminated grants} es desa en una col·lecció, dissenyada per facilitar filtratges i anàlisi posterior. S’hi creen índexs sobre l’identificador de la subvenció.
+
+\subsection{Exploitation zone}
+
+La \textit{exploitation zone} és la capa orientada directament a l’ús analític i predictiu de les dades. A partir de les dades ja consolidades a la \textit{formatted zone}, en aquesta etapa es construeixen \textit{datasets} específics per a l’entrenament de models, l’avaluació de resultats i l’explotació analítica.
+
+
+
+
+\section{Airflow DAG}
+
+Per fer el disseny del DAG de Airflow tenim 3 opcions diferents. Un flux conínuu de tres fases, collect, format, transform. Un flux amb fases paraleles per cada dataset diferent, collect, format i un transform que es fa al final del DAG amb totes les dades. La tercera opció és fer 5 DAGS diferents, un dag per cada dataset amb collect i format. I fer un sisè DAG que sigui només el transform. Cada una de les opcions té les seves avantatges i al final, en un cas real triaríem la opció que més convé pels interessos del client.
+
+\subsection{Opció 1}
+Aquesta primera opció no té pràcticament cap avantatge, l'única cosa positiva que podem trobar és que és una pipeline simple i molt fàcil d'entendre on cada etapa consisteix en un bloc de la nostre execució. A sobre, cada dependència té una funció molt clara i general. En quan a eficiència és dolenta.
+\begin{figure}[H]
+    \centering
+    \includesvg[width=0.5\textwidth]{dag_1}
+    \caption{Airflow DAG — Option 1: Single sequential pipeline}
+    \label{fig:dag1}
+\end{figure}
+
+
+
+\subsection{Opció 2}
+
+Aquesta opció és molt més eficient que la primera, ja qu epermet l'execució paral·lela de les tasques. El problema que té aquest setup és que no podem correr per separat els 5 datasets. Només podem correr per separat flagged words i els altres 4. Això és perquè el transform fa merges entre els diferents datasets i, per tant, necessita accés als 4.
+
+\begin{figure}[H]
+    \centering
+    \includesvg[width=0.5\textwidth]{dag_2}
+    \caption{Airflow DAG — Option 2: Parallel pipelines per dataset}
+    \label{fig:dag2}
+\end{figure}
+
+\subsection{Opció 3}
+
+Aquesta tercera opció és una manera d'arreglar el segon DAG per tal d'acceptar correr individualment les 5 pipelines. El problema que presenta aquesta és que tenim una pipeline separada d'un sol element que depèn de l'execució de la resta de pipelines. Això  ens pots donar problemes de freshness on sense voler podem executar el DAG de transform sense haver acabat els 5 anteriors o encara pitjor, havent acabat 4 dels 5 i no adonar-nos.
+\begin{figure}[H]
+    \centering
+    \includesvg[width=0.5\textwidth]{dag_3}
+    \caption{Airflow DAG — Option 3: Independent DAGs with standalone transform}
+    \label{fig:dag3}
+\end{figure}
+\subsection{Decisió final}
+Per fer la decisió final, tenim en compte que totes les dades que estem tractant necessiten la mateixa freshness i per tant té molt sentit tenir dags executats en el mateix període i tots junts. Això ens porta a triar la segona opció. Tanmateix, si el client volgués refrescar la taula de awards cada setmana i les altres cada dia, s'haurien de separar els DAG. Per aquest exercici i la simplicitat suposem que el client vol totes les dades amb la mateixa frescura.
+
+\section{Machine learning models}
+\end{document}
