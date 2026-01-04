@@ -225,19 +225,20 @@ Aquesta tercera opció és una manera d'arreglar el segon DAG per tal d'acceptar
     \label{fig:dag3}
 \end{figure}
 \subsection{Decisió final}
-Per fer la decisió final, tenim en compte que totes les dades que estem tractant necessiten la mateixa freshness i per tant té molt sentit tenir dags executats en el mateix període i tots junts. Això ens porta a triar la segona opció. Tanmateix, si el client volgués refrescar la taula de awards cada setmana i les altres cada dia, s'haurien de separar els DAG. Per aquest exercici i la simplicitat suposem que el client vol totes les dades amb la mateixa frescura.
+Per fer la decisió final, tenim en compte que totes les dades que estem tractant necessiten la mateixa \textit{freshness} i, per tant, té molt sentit tenir dags executats en el mateix període i tots junts. Això ens porta a triar la segona opció. Tanmateix, si el client volgués refrescar la taula de awards cada setmana i les altres cada dia, s'haurien de separar els DAG. Per aquest exercici i la simplicitat suposem que el client vol totes les dades amb la mateixa frescor.
+
 
 \section{Machine learning models}
 
-En aquesta secció documentem el procés d'entrenament dels models de machine learning per predir si una subvenció formarà part de la llista de Cruz (variable objectiu \texttt{in\_cruz\_list}).
+En aquesta secció documentem el procés d'entrenament dels models de machine learning per predir si una subvenció serà cancel·lada o terminada per l'administració Trump (variable objectiu \texttt{is\_terminated}).
 
 \subsection{Enfocament del problema}
 
-El problema plantejat és una tasca de \textbf{classificació binària}: predir si una subvenció de la NSF serà inclosa a la llista de Cruz (\texttt{in\_cruz\_list = True}) o no (\texttt{in\_cruz\_list = False}).
+El problema plantejat és una tasca de \textbf{classificació binària}: predir si una subvenció de la NSF serà cancel·lada/terminada (\texttt{is\_terminated = 1}) o es mantindrà activa (\texttt{is\_terminated = 0}).
 
-\textbf{Desequilibri de classes:} El dataset presenta un fort desequilibri, amb significativament més subvencions que no formen part de la llista de Cruz. Aquest desequilibri pot afectar el rendiment dels models, ja que tendeixen a predir la classe majoritària per maximitzar l'accuracy.
+\textbf{Desequilibri de classes:} El dataset presenta un fort desequilibri, amb significativament més subvencions actives que cancel·lades. Aquest desequilibri pot afectar el rendiment dels models, ja que tendeixen a predir la classe majoritària per maximitzar l'accuracy.
 
-\textbf{Estratègia adoptada:} Per abordar aquest desequilibri, hem aplicat \textbf{pesos de classe} (\textit{class weights}) als models, de manera que les mostres de la classe minoritària tinguin més importància durant l'entrenament. A més, utilitzem mètriques com F1-score i AUC-ROC que són més robustes davant datasets desequilibrats que la simple accuracy.
+Per abordar aquest desequilibri, hem aplicat pesos de classe (\textit{class weights}) als models, de manera que les mostres de la classe minoritària tinguin més importància durant l'entrenament. A més, utilitzem mètriques com F1-score i AUC-ROC que són més robustes davant datasets desequilibrats que la simple accuracy.
 
 \subsection{Preprocessament de dades}
 
@@ -248,21 +249,24 @@ Les dades utilitzades provenen de la zona d'explotació (Delta tables), generada
         \begin{itemize}
             \item \texttt{estimated\_total\_amt}: quantitat total estimada de la subvenció
             \item \texttt{funds\_obligated\_amt}: fons compromesos
-            \item \texttt{log\_estimated\_total}: transformació logarítmica de l'import
-            \item \texttt{has\_flagged\_words}: nombre de paraules clau sensibles al títol/abstract
-            \item \texttt{flagged\_word\_count}: comptatge de paraules clau
-            \item \texttt{flagged\_word\_density}: densitat de paraules clau al text
+            \item \texttt{flagged\_word\_count\_abstract}: nombre d'ocurrències de paraules clau sensibles a l'abstract
+            \item \texttt{flagged\_word\_unique\_abstract}: nombre de paraules clau úniques a l'abstract
+            \item \texttt{flagged\_word\_ratio\_abstract}: proporció de paraules clau respecte al total de paraules a l'abstract
+            \item \texttt{flagged\_word\_count\_title}: nombre d'ocurrències de paraules clau al títol
+            \item \texttt{flagged\_word\_diversity\_score}: diversitat de paraules clau utilitzades
         \end{itemize}
     \item \textbf{Features categòriques:} 
         \begin{itemize}
+            \item \texttt{perfstatecode}: codi de l'estat on es realitza la recerca
             \item \texttt{representant}: partit polític del representant de l'estat
             \item \texttt{senator}: partit polític del senador de l'estat
-            \item \texttt{perfstatecode}: codi de l'estat on es realitza la recerca
         \end{itemize}
     \item \textbf{Features booleanes:}
         \begin{itemize}
-            \item \texttt{is\_terminated}: si la subvenció ha estat cancel·lada
+            \item \texttt{has\_flagged\_words}: presència de paraules clau sensibles al títol o abstract
+            \item \texttt{in\_cruz\_list}: si la subvenció apareix a la llista de Cruz (indicador predictiu important)
         \end{itemize}
+    \item \textbf{Variable objectiu:} \texttt{is\_terminated} (1 = cancel·lada, 0 = activa)
 \end{itemize}
 
 \textbf{Tractament de valors nuls:} S'han eliminat les files amb valors nuls a les columnes numèriques per garantir la qualitat de les dades d'entrenament.
@@ -276,13 +280,13 @@ S'han entrenat quatre tipus de models utilitzant Spark MLlib, tots ells amb ajus
 \subsubsection{Baseline Models}
 
 \textbf{1. Random Baseline:}
-Genera prediccions aleatòries seguint la distribució observada al dataset d'entrenament. Punt de referència mínim per validar que els models aprenen dels datos.
+Genera prediccions aleatòries seguint la distribució observada al conjunt de dades d'entrenament. Punt de referència mínim per validar que els models aprenen de les dades.
 
 \textbf{2. Majority Class Baseline:}
-Prediu sempre la classe majoritària. Estableix l'accuracy mínim esperable ignorant completament les features del dataset.
+Prediu sempre la classe majoritària. Estableix l'accuracy mínim esperable ignorant completament les features del conjunt de dades.
 
 \textbf{3. Stratified Baseline:}
-Combina estratègia aleatòria mantenint la distribució de classes. Validació addicional del preprocessament de dades.
+Combina l'estratègia aleatòria mantenint la distribució de classes. Validació addicional del preprocessament de dades.
 
 \subsubsection{Models de Machine Learning}
 
@@ -299,7 +303,7 @@ Ensemble seqüencial d'arbres que itera sobre els errors dels models anteriors. 
 
 \subsection{Resultats}
 
-La Taula \ref{tab:model_comparison} mostra els resultats obtinguts pels diferents models en els conjunts de validació i test:
+La taula \ref{tab:model_comparison} mostra els resultats obtinguts pels diferents models en els conjunts de validació i test:
 
 \begin{table}[H]
 \centering
@@ -332,12 +336,7 @@ Gradient Boosted Trees & 0.8812 & 0.1063 & 0.7159 \\
 \end{table}
 
 \textbf{Observacions:}
-\begin{itemize}
-    \item Els models de ML superen clarament els baselines, validant l'eficàcia de les features extretes durant el preprocessament.
-    \item Gradient Boosted Trees obté el millor F1-score (0.1063), indicant un millor equilibri entre precision i recall per a la classe minoritària.
-    \item Els AUC-ROC superiors a 0.70 demostren bona capacitat de discriminació entre classes.
-    \item Els resultats són consistents entre validació i test, confirmant bona generalització.
-\end{itemize}
+Els models de machine learning superen clarament els baselines, validant l'eficàcia de les features extretes durant el preprocessament de dades. Gradient Boosted Trees obté el millor F1-score amb un valor de 0.1063, indicant un millor equilibri entre precision i recall per a la classe minoritària. Els valors d'AUC-ROC superiors a 0.70 per als tres models de machine learning demostren una bona capacitat de discriminació entre les dues classes, mentre que els baselines obtenen un AUC-ROC de 0.50 (equivalent a prediccions aleatòries). Els resultats són consistents entre els conjunts de validació i test, confirmant una bona generalització dels models i absent d'overfitting significatiu.
 
 \begin{figure}[H]
     \centering
@@ -348,16 +347,12 @@ Gradient Boosted Trees & 0.8812 & 0.1063 & 0.7159 \\
 
 \subsection{Selecció del model}
 
-\textbf{Criteri de selecció:} Hem utilitzat el \textbf{F1-score} com a mètrica principal per seleccionar el millor model, ja que equilibra precision i recall, cosa especialment important en datasets desequilibrats com el nostre (només l'1.4\% de les subvencions formen part de la llista de Cruz).
+\textbf{Criteri de selecció:} Hem utilitzat la F1-score com a mètrica principal per seleccionar el millor model, ja que equilibra precision i recall, cosa especialment important en datasets desequilibrats com el nostre (només l'1.7\% de les subvencions han estat cancel·lades).
 
-\textbf{Model seleccionat:} Gradient Boosted Trees amb un F1-score de 0.1063 al conjunt de test.
+\textbf{Model seleccionat:} Gradient Boosted Trees amb una F1-score de 0.1063 al conjunt de test.
 
 \textbf{Justificació:}
-\begin{itemize}
-    \item Millor F1-score entre tots els models, indicant millor detecció de la classe minoritària
-    \item AUC-ROC de 0.7159, demostrant bona capacitat de discriminació
-    \item Millora significativa respecte als baselines (F1 de 0.1063 vs 0.0488 del millor baseline)
-\end{itemize}
+Gradient Boosted Trees ha estat seleccionat per obtenir el millor F1-score entre tots els models avaluats, indicant una millor detecció i classificació de la classe minoritària (subvencions cancel·lades). El model presenta un AUC-ROC de 0.7159, demostrant una bona capacitat de discriminació entre subvencions actives i cancel·lades. Especialment rellevant és la millora significativa respecte als models baseline, amb una F1-score de 0.1063 comparat amb el 0.0488 del millor baseline (Stratified), validant l'ús de tècniques avançades de machine learning i l'enginyeria de features basada en anàlisi textual i context polític.
 
 \begin{figure}[H]
     \centering
