@@ -170,21 +170,13 @@ La resta de dades les descarreguem directament d'un link de descàrrega a intern
 
 \subsection{Formatted zone}
 
-La \textit{formatted zone} conté les dades ja processades i normalitzades, llestes per ser utilitzades de manera consistent en fases posteriors d’anàlisi o modelatge. Aquesta zona s’alimenta exclusivament de la \textit{landing zone} mitjançant scripts de tipus \texttt{formatter}, que llegeixen les dades en brut i hi apliquen una sèrie de transformacions estructurals i semàntiques.
+La \textit{formatted zone} conté les dades ja processades i normalitzades, llestes per ser utilitzades de manera consistent en fases posteriors d'anàlisi o modelatge. Aquesta zona s'alimenta exclusivament de la \textit{landing zone} mitjançant scripts de tipus \texttt{formatter}, que llegeixen les dades en brut i hi apliquen una sèrie de transformacions estructurals i semàntiques.
 
-En tots els datasets, el procés de formatatge segueix un patró comú. A partir de les dades emmagatzemades a la \textit{landing zone}, els scripts \texttt{formatter} estandarditzen els noms de les columnes, normalitzen els tipus de dades (dates, valors numèrics i booleans), tracten valors nuls o inconsistents i eliminen duplicats quan és necessari. A més, s’hi afegeixen camps de metadades, com la data de formatatge, per facilitar la traçabilitat. Un cop aplicades aquestes transformacions, les dades es carreguen a MongoDB, que actua com a repositori de la \textit{formatted zone}.
-
-En el cas de la \textit{Cruz List}, les dades formatades s’emmagatzemen en una col·lecció específica de MongoDB, amb una estructura orientada a facilitar l’encreuament amb altres datasets de subvencions. Abans de la inserció, la col·lecció es buida per garantir consistència, i es creen índexs sobre camps clau com l’identificador de la subvenció, permetent cerques ràpides i agregacions eficients.
-
-El dataset de \textit{flagged words} es desa en una col·lecció lleugera. La col·lecció conté únicament la paraula normalitzada i metadades associades, i incorpora un índex sobre el camp principal per optimitzar operacions de cerca i coincidència.
-
-Pel que fa al conjunt de dades de \textit{legislators}, es manté l’estructura original del dataset, aprofitant el model documental de MongoDB per conservar informació. Les dades es guarden com a documents complets i s’indexa l’identificador principal del legislador per facilitar enllaços amb altres col·leccions.
-
-Finalment, el dataset de \textit{terminated grants} es desa en una col·lecció, dissenyada per facilitar filtratges i anàlisi posterior. S’hi creen índexs sobre l’identificador de la subvenció.
+El sistema utilitza configuracions explícites per dataset (\texttt{FormatterConfig}) que defineixen mapejaments de columnes, formats de dates i validacions específiques per a cada font de dades. El flux de processament aplica operacions de renomenat de columnes (per exemple, conversió de camelCase a snake\_case), parsejat de dates amb formats específics, conversió de tipus numèrics i booleeans, i transformacions personalitzades quan és necessari (com la neteja de valors categòrics nuls o el filtratge de paraules invàlides). Un cop processades, les dades es carreguen a MongoDB amb índexs optimitzats sobre els camps clau (\texttt{award\_id}, \texttt{award\_number}, etc.) per facilitar l'accés en fases posteriors.
 
 \subsection{Exploitation zone}
 
-La \textit{exploitation zone} és la capa orientada directament a l’ús analític i predictiu de les dades. A partir de les dades ja consolidades a la \textit{formatted zone}, en aquesta etapa es construeixen \textit{datasets} específics per a l’entrenament de models, l’avaluació de resultats i l’explotació analítica.
+La \textit{exploitation zone} és la capa orientada directament a l'ús analític i predictiu de les dades. A partir de les dades ja consolidades a la \textit{formatted zone}, en aquesta etapa es construeixen \textit{datasets} específics per a l'entrenament de models, l'avaluació de resultats i l'explotació analítica.
 
 
 
