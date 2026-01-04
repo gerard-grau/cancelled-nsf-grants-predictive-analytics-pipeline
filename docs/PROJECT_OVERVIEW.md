@@ -1,3 +1,8 @@
+# Virtual environment:
+To load the virtual environment, use:
+`source ../../venv-BDA/bin/activate`
+
+
 # NSF Grants Cancellation Prediction Project
 
 ## Project Goal

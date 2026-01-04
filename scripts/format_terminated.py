@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 
 from pymongo import ASCENDING
-from pyspark.sql import functions as F
+from pyspark.sql import DataFrame, functions as F
 
 from config import (
     MONGO_URI, MONGO_DB,
@@ -14,32 +14,13 @@ from config import (
 from formatter_utils import (
     MongoDBManager,
     create_spark_session,
-    parse_date_column,
-    standardize_column_names,
-    write_df_to_mongo,
+    FormatterConfig,
+    generic_formatter,
 )
 
 
-def format_terminated_grants(spark, mongo: MongoDBManager) -> int:
-    print("\n" + "=" * 80)
-    print("📊 Formatting Terminated Grants Dataset")
-    print("=" * 80)
-
-    print(f"⬇️  Reading from: {LANDING_TERMINATED}")
-    df = spark.read.parquet(str(LANDING_TERMINATED))
-
-    initial_count = df.count()
-    print(f"   ✓ Loaded {initial_count:,} records")
-
-    df = standardize_column_names(df)
-
-    # parse dates
-    date_fields = [c for c in df.columns if "date" in c.lower()]
-    for date_field in date_fields:
-        print(f"   📅 Parsing date field: {date_field}")
-        df = parse_date_column(df, date_field)
-
-    # boolean in_cruz_list
+def parse_boolean_field(df: DataFrame) -> DataFrame:
+    """Custom transformation for in_cruz_list boolean field."""
     if "in_cruz_list" in df.columns:
         df = df.withColumn(
             "in_cruz_list",
@@ -58,33 +39,32 @@ def format_terminated_grants(spark, mongo: MongoDBManager) -> int:
             .otherwise(None)
             .cast("boolean"),
         )
+    return df
 
-    # numeric field
-    if "usaspending_obligated" in df.columns:
-        df = df.withColumn(
-            "usaspending_obligated",
-            F.expr("try_cast(usaspending_obligated as double)"),
-        )
 
-    df = df.withColumn("formatted_at", F.lit(datetime.now()))
+# Configuration for terminated grants dataset
+TERMINATED_GRANTS_CONFIG = FormatterConfig(
+    name="Terminated Grants",
+    landing_path=str(LANDING_TERMINATED),
+    collection_name=COLLECTION_TERMINATED_GRANTS,
+    file_format="parquet",
+    column_mapping={},  # Already snake_case
+    date_columns={
+        "termination_letter_date": "yyyy-MM-dd",
+        "nsf_startdate": "yyyy-MM-dd",
+        "nsf_expected_end_date": "yyyy-MM-dd",
+    },
+    numeric_columns=["usaspending_obligated"],
+    id_column="grant_number",
+    dedupe_columns=None,
+    indexes=[("grant_number", ASCENDING), ("in_cruz_list", ASCENDING)],
+    custom_transform=parse_boolean_field,
+)
 
-    print(f"🧹 Clearing collection: {COLLECTION_TERMINATED_GRANTS}")
-    mongo.clear_collection(COLLECTION_TERMINATED_GRANTS)
 
-    print(f"💾 Writing to MongoDB collection: {COLLECTION_TERMINATED_GRANTS}")
-    documents_written = write_df_to_mongo(df, COLLECTION_TERMINATED_GRANTS, mongo)
-
-    print("🔍 Creating indexes...")
-    index_list = []
-    if "grant_number" in df.columns:
-        index_list.append(("grant_number", ASCENDING))
-    if "in_cruz_list" in df.columns:
-        index_list.append(("in_cruz_list", ASCENDING))
-    if index_list:
-        mongo.create_indexes(COLLECTION_TERMINATED_GRANTS, index_list)
-
-    print(f"✅ Terminated Grants formatting complete: {documents_written:,} documents")
-    return documents_written
+def format_terminated_grants(spark, mongo: MongoDBManager) -> int:
+    """Format terminated grants using generic formatter."""
+    return generic_formatter(spark, mongo, TERMINATED_GRANTS_CONFIG)
 
 
 def main():

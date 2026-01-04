@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 
 from pymongo import ASCENDING
-from pyspark.sql import functions as F
+from pyspark.sql import DataFrame, functions as F
 
 from config import (
     MONGO_URI, MONGO_DB,
@@ -14,69 +14,76 @@ from config import (
 from formatter_utils import (
     MongoDBManager,
     create_spark_session,
-    parse_date_column,
-    clean_numeric_id,
-    standardize_column_names,
-    write_df_to_mongo,
+    FormatterConfig,
+    generic_formatter,
+)
+
+
+def clean_category_fields(df: DataFrame) -> DataFrame:
+    """Custom transformation to clean category fields."""
+    category_fields = [c for c in df.columns if "category" in c.lower()]
+    if category_fields:
+        for cat_field in category_fields:
+            df = df.withColumn(
+                cat_field,
+                F.when(
+                    F.trim(F.col(cat_field)).isin("", "NULL", "null", "None"),
+                    None,
+                ).otherwise(F.col(cat_field)),
+            )
+    return df
+
+
+# Configuration for Cruz list dataset
+CRUZ_LIST_CONFIG = FormatterConfig(
+    name="Cruz List",
+    landing_path=str(LANDING_CRUZ_LIST),
+    collection_name=COLLECTION_CRUZ_LIST,
+    file_format="parquet",
+    column_mapping={
+        "AWARD ID": "award_id",
+        "USASPENDING LINK": "usaspending_link",
+        "TOTAL AWARD FUNDING AMOUNT": "total_award_funding_amount",
+        "RECIPIENT TYPE": "recipient_type",
+        "RECIPIENT NAME": "recipient_name",
+        "RECIPIENT PARENT NAME": "recipient_parent_name",
+        "RECIPIENT STATE": "recipient_state",
+        "RECIPIENT STATE OF PERFORMANCE": "recipient_state_of_performance",
+        "STATUS CATEGORY": "status_category",
+        "SOCIAL JUSTICE CATEGORY": "social_justice_category",
+        "RACE CATEGORY": "race_category",
+        "GENDER CATEGORY": "gender_category",
+        "ENVIRONMENTAL JUSTICE CATEGORY": "environmental_justice_category",
+        "AWARD DESCRIPTIONS": "award_descriptions",
+        "AWARD ACTION DATE": "award_action_date",
+        "PERFORMANCE START DATE": "performance_start_date",
+        "PERFORMANCE END DATE": "performance_end_date",
+        "RECIPIENT CITY": "recipient_city",
+        "RECIPIENT CITY OF PERFORMANCE": "recipient_city_of_performance",
+        "RECIPIENT FOREIGN CITY": "recipient_foreign_city",
+        "RECIPIENT FOREIGN CITY OF PERFORMANCE": "recipient_foreign_city_of_performance",
+        "RECIPIENT COUNTRY": "recipient_country",
+        "RECIPIENT COUNTRY OF PERFORMANCE": "recipient_country_of_performance",
+        "NSF FUNDING OFFICE": "nsf_funding_office",
+        "NSF AWARD CATEGORY": "nsf_award_category",
+        "NSF AWARD TYPE": "nsf_award_type",
+    },
+    date_columns={
+        "award_action_date": "MM/dd/yyyy",
+        "performance_start_date": "MM/dd/yyyy",
+        "performance_end_date": "MM/dd/yyyy",
+    },
+    numeric_columns=["total_award_funding_amount"],
+    id_column="award_id",
+    dedupe_columns=None,
+    indexes=[("award_id", ASCENDING)],
+    custom_transform=clean_category_fields,
 )
 
 
 def format_cruz_list(spark, mongo: MongoDBManager) -> int:
-    print("\n" + "=" * 80)
-    print("📊 Formatting Cruz List Dataset")
-    print("=" * 80)
-
-    print(f"⬇️  Reading from: {LANDING_CRUZ_LIST}")
-    df = spark.read.parquet(str(LANDING_CRUZ_LIST))
-
-    initial_count = df.count()
-    print(f"   ✓ Loaded {initial_count:,} records")
-
-    df = standardize_column_names(df)
-
-    if "award_id" in df.columns:
-        print("🧹 Cleaning award IDs...")
-        df = clean_numeric_id(df, "award_id")
-
-    # parse dates
-    date_fields = [c for c in df.columns if "date" in c.lower()]
-    for date_field in date_fields:
-        print(f"   📅 Parsing date field: {date_field}")
-        df = parse_date_column(df, date_field)
-
-    if "total_award_funding_amount" in df.columns:
-        df = df.withColumn(
-            "total_award_funding_amount",
-            F.expr("try_cast(total_award_funding_amount as double)"),
-        )
-
-    category_fields = [c for c in df.columns if "category" in c.lower()]
-    for cat_field in category_fields:
-        df = df.withColumn(
-            cat_field,
-            F.when(
-                F.trim(F.col(cat_field)).isin("", "NULL", "null", "None"),
-                None,
-            ).otherwise(F.col(cat_field)),
-        )
-
-    df = df.withColumn("formatted_at", F.lit(datetime.now()))
-
-    print(f"🧹 Clearing collection: {COLLECTION_CRUZ_LIST}")
-    mongo.clear_collection(COLLECTION_CRUZ_LIST)
-
-    print(f"💾 Writing to MongoDB collection: {COLLECTION_CRUZ_LIST}")
-    documents_written = write_df_to_mongo(df, COLLECTION_CRUZ_LIST, mongo)
-
-    print("🔍 Creating indexes...")
-    index_list = []
-    if "award_id" in df.columns:
-        index_list.append(("award_id", ASCENDING))
-    if index_list:
-        mongo.create_indexes(COLLECTION_CRUZ_LIST, index_list)
-
-    print(f"✅ Cruz List formatting complete: {documents_written:,} documents")
-    return documents_written
+    """Format Cruz list using generic formatter."""
+    return generic_formatter(spark, mongo, CRUZ_LIST_CONFIG)
 
 
 def main():

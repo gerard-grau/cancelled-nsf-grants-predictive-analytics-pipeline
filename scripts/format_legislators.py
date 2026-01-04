@@ -11,12 +11,28 @@ from config import (
 from formatter_utils import (
     MongoDBManager,
     create_spark_session,
-    standardize_column_names,
-    write_df_to_mongo,
+    FormatterConfig,
+    generic_formatter,
+)
+
+# Configuration for legislators dataset
+LEGISLATORS_CONFIG = FormatterConfig(
+    name="Legislators",
+    landing_path=str(LANDING_LEGISLATORS),
+    collection_name=COLLECTION_LEGISLATORS,
+    file_format="parquet",
+    column_mapping={},  # No mapping needed
+    date_columns={},
+    numeric_columns=[],
+    id_column="id",
+    dedupe_columns=None,
+    indexes=[("id.bioguide", 1)],
 )
 
 
 def format_legislators(spark, mongo: MongoDBManager) -> int:
+    """Format legislators using generic formatter."""
+    return generic_formatter(spark, mongo, LEGISLATORS_CONFIG)
     print("\n" + "=" * 80)
     print("📊 Formatting Legislators Dataset")
     print("=" * 80)
@@ -27,8 +43,16 @@ def format_legislators(spark, mongo: MongoDBManager) -> int:
     initial_count = df.count()
     print(f"   ✓ Loaded {initial_count:,} records")
 
-    df = standardize_column_names(df)
-    df = df.withColumn("formatted_at", df.sparkSession.sql.functions.lit(datetime.now()))
+    # No column mapping needed - legislators data is well-structured
+    
+    # Validate required fields
+    print("✅ Validating required fields...")
+    if "id" in df.columns:
+        null_count = df.filter(F.col("id").isNull()).count()
+        if null_count > 0:
+            print(f"   ⚠️  Warning: {null_count} records with null id")
+    
+    df = df.withColumn("formatted_at", F.lit(datetime.now()))
 
     print(f"🧹 Clearing collection: {COLLECTION_LEGISLATORS}")
     mongo.clear_collection(COLLECTION_LEGISLATORS)

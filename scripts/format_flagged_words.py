@@ -4,7 +4,7 @@ import sys
 from datetime import datetime
 
 from pymongo import ASCENDING
-from pyspark.sql import functions as F
+from pyspark.sql import DataFrame, functions as F
 
 from config import (
     MONGO_URI, MONGO_DB,
@@ -14,12 +14,47 @@ from config import (
 from formatter_utils import (
     MongoDBManager,
     create_spark_session,
-    standardize_column_names,
-    write_df_to_mongo,
+    FormatterConfig,
+    generic_formatter,
+)
+
+
+def normalize_and_validate_words(df: DataFrame) -> DataFrame:
+    """Custom transformation to normalize and validate flagged words."""
+    if "flagged_word" in df.columns:
+        # Normalize to lowercase
+        df = df.withColumn("flagged_word", F.lower(F.trim(F.col("flagged_word"))))
+        
+        # Filter out null and empty values
+        null_count = df.filter(F.col("flagged_word").isNull()).count()
+        empty_count = df.filter(F.col("flagged_word") == "").count()
+        
+        if null_count > 0 or empty_count > 0:
+            print(f"   ⚠️  Filtering out {null_count} null and {empty_count} empty flagged words")
+            df = df.filter(F.col("flagged_word").isNotNull() & (F.col("flagged_word") != ""))
+    
+    return df
+
+
+# Configuration for flagged words dataset
+FLAGGED_WORDS_CONFIG = FormatterConfig(
+    name="Flagged Words",
+    landing_path=str(LANDING_FLAGGED_WORDS),
+    collection_name=COLLECTION_FLAGGED_WORDS,
+    file_format="parquet",
+    column_mapping={},  # No mapping needed
+    date_columns={},
+    numeric_columns=[],
+    id_column=None,
+    dedupe_columns=["flagged_word"],
+    indexes=[("flagged_word", ASCENDING)],
+    custom_transform=normalize_and_validate_words,
 )
 
 
 def format_flagged_words(spark, mongo: MongoDBManager) -> int:
+    """Format flagged words using generic formatter."""
+    return generic_formatter(spark, mongo, FLAGGED_WORDS_CONFIG)
     print("\n" + "=" * 80)
     print("📊 Formatting Flagged Words Dataset")
     print("=" * 80)
@@ -30,13 +65,19 @@ def format_flagged_words(spark, mongo: MongoDBManager) -> int:
     initial_count = df.count()
     print(f"   ✓ Loaded {initial_count:,} flagged words")
 
-    # Standardize column names
-    df = standardize_column_names(df)
-
     # Normalize flagged words to lowercase for case-insensitive matching
     if "flagged_word" in df.columns:
         print("🧹 Normalizing flagged words to lowercase...")
         df = df.withColumn("flagged_word", F.lower(F.trim(F.col("flagged_word"))))
+    
+    # Validate required fields
+    print("✅ Validating required fields...")
+    if "flagged_word" in df.columns:
+        null_count = df.filter(F.col("flagged_word").isNull()).count()
+        empty_count = df.filter(F.trim(F.col("flagged_word")) == "").count()
+        if null_count > 0 or empty_count > 0:
+            print(f"   ⚠️  Warning: {null_count} null and {empty_count} empty flagged words")
+            df = df.filter(F.col("flagged_word").isNotNull() & (F.trim(F.col("flagged_word")) != ""))
 
     # Remove duplicates
     initial = df.count()
