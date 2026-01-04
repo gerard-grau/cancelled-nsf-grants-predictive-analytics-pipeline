@@ -228,4 +228,143 @@ Aquesta tercera opció és una manera d'arreglar el segon DAG per tal d'acceptar
 Per fer la decisió final, tenim en compte que totes les dades que estem tractant necessiten la mateixa freshness i per tant té molt sentit tenir dags executats en el mateix període i tots junts. Això ens porta a triar la segona opció. Tanmateix, si el client volgués refrescar la taula de awards cada setmana i les altres cada dia, s'haurien de separar els DAG. Per aquest exercici i la simplicitat suposem que el client vol totes les dades amb la mateixa frescura.
 
 \section{Machine learning models}
+
+En aquesta secció documentem el procés d'entrenament dels models de machine learning per predir si una subvenció formarà part de la llista de Cruz (variable objectiu \texttt{in\_cruz\_list}).
+
+\subsection{Enfocament del problema}
+
+El problema plantejat és una tasca de \textbf{classificació binària}: predir si una subvenció de la NSF serà inclosa a la llista de Cruz (\texttt{in\_cruz\_list = True}) o no (\texttt{in\_cruz\_list = False}).
+
+\textbf{Desequilibri de classes:} El dataset presenta un fort desequilibri, amb significativament més subvencions que no formen part de la llista de Cruz. Aquest desequilibri pot afectar el rendiment dels models, ja que tendeixen a predir la classe majoritària per maximitzar l'accuracy.
+
+\textbf{Estratègia adoptada:} Per abordar aquest desequilibri, hem aplicat \textbf{pesos de classe} (\textit{class weights}) als models, de manera que les mostres de la classe minoritària tinguin més importància durant l'entrenament. A més, utilitzem mètriques com F1-score i AUC-ROC que són més robustes davant datasets desequilibrats que la simple accuracy.
+
+\subsection{Preprocessament de dades}
+
+Les dades utilitzades provenen de la zona d'explotació (Delta tables), generada pel script \texttt{data\_transformer.py}. El dataset final conté:
+
+\begin{itemize}
+    \item \textbf{Features numèriques:} 
+        \begin{itemize}
+            \item \texttt{estimated\_total\_amt}: quantitat total estimada de la subvenció
+            \item \texttt{funds\_obligated\_amt}: fons compromesos
+            \item \texttt{log\_estimated\_total}: transformació logarítmica de l'import
+            \item \texttt{has\_flagged\_words}: nombre de paraules clau sensibles al títol/abstract
+            \item \texttt{flagged\_word\_count}: comptatge de paraules clau
+            \item \texttt{flagged\_word\_density}: densitat de paraules clau al text
+        \end{itemize}
+    \item \textbf{Features categòriques:} 
+        \begin{itemize}
+            \item \texttt{representant}: partit polític del representant de l'estat
+            \item \texttt{senator}: partit polític del senador de l'estat
+            \item \texttt{perfstatecode}: codi de l'estat on es realitza la recerca
+        \end{itemize}
+    \item \textbf{Features booleanes:}
+        \begin{itemize}
+            \item \texttt{is\_terminated}: si la subvenció ha estat cancel·lada
+        \end{itemize}
+\end{itemize}
+
+\textbf{Tractament de valors nuls:} S'han eliminat les files amb valors nuls a les columnes numèriques per garantir la qualitat de les dades d'entrenament.
+
+\textbf{Divisió del dataset:} S'ha utilitzat una divisió 80/20 per a train/test, amb un seed fix (\texttt{seed=42}) per garantir la reproductibilitat.
+
+\subsection{Models entrenats}
+
+S'han entrenat quatre tipus de models utilitzant Spark MLlib, tots ells amb ajust d'hiperparàmetres mitjançant CrossValidation:
+
+\subsubsection{Baseline Models}
+
+\textbf{1. Random Baseline:}
+Genera prediccions aleatòries seguint la distribució observada al dataset d'entrenament. Punt de referència mínim per validar que els models aprenen dels datos.
+
+\textbf{2. Majority Class Baseline:}
+Prediu sempre la classe majoritària. Estableix l'accuracy mínim esperable ignorant completament les features del dataset.
+
+\textbf{3. Stratified Baseline:}
+Combina estratègia aleatòria mantenint la distribució de classes. Validació addicional del preprocessament de dades.
+
+\subsubsection{Models de Machine Learning}
+
+\textbf{4. Logistic Regression (LR):}
+Model lineal simple. Entrenat amb Spark MLlib utilitzant CrossValidation per optimitzar hiperparàmetres (\texttt{regParam}, \texttt{elasticNetParam}, \texttt{maxIter}). Execució ràpida i resultats interpretables.
+
+\textbf{5. Random Forest (RF):}
+Ensemble de múltiples arbres de decisió que vota per majoria. Processa les dades del dataset mitjançant CrossValidation optimitzant \texttt{numTrees}, \texttt{maxDepth} i \texttt{minInstancesPerNode}. Capta relacions no lineals entre features.
+
+\textbf{6. Gradient Boosted Trees (GBT):}
+Ensemble seqüencial d'arbres que itera sobre els errors dels models anteriors. Entrenament més llarg però millor rendiment en datasets desequilibrats. Hiperparàmetres optimitzats: \texttt{maxIter}, \texttt{maxDepth}, \texttt{stepSize}.
+
+\textit{Nota:} Tots els models utilitzen class weights per compensar el desequilibri de classes (1.4\% positius vs 98.6\% negatius) i garantir que el model aprengui de la classe minoritària.
+
+\subsection{Resultats}
+
+La Taula \ref{tab:model_comparison} mostra els resultats obtinguts pels diferents models en els conjunts de validació i test:
+
+\begin{table}[H]
+\centering
+\caption{Comparació de rendiment dels models}
+\label{tab:model_comparison}
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{Accuracy} & \textbf{F1-Score} & \textbf{AUC-ROC} \\
+\midrule
+\multicolumn{4}{c}{\textit{Validation Set}} \\
+\midrule
+Baseline (Majority) & 0.9856 & 0.0000 & 0.5000 \\
+Baseline (Random) & 0.4928 & 0.0306 & 0.5000 \\
+Baseline (Stratified) & 0.9688 & 0.0488 & 0.5000 \\
+Logistic Regression & 0.8952 & 0.0576 & 0.7024 \\
+Random Forest & 0.9344 & 0.0682 & 0.6730 \\
+Gradient Boosted Trees & 0.8776 & 0.0727 & 0.6548 \\
+\midrule
+\multicolumn{4}{c}{\textit{Test Set}} \\
+\midrule
+Baseline (Majority) & 0.9833 & 0.0000 & 0.5000 \\
+Baseline (Random) & 0.4888 & 0.0293 & 0.5000 \\
+Baseline (Stratified) & 0.9666 & 0.0000 & 0.5000 \\
+Logistic Regression & 0.8838 & 0.0718 & 0.7052 \\
+Random Forest & 0.9294 & 0.0984 & 0.7263 \\
+Gradient Boosted Trees & 0.8812 & 0.1063 & 0.7159 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Observacions:}
+\begin{itemize}
+    \item Els models de ML superen clarament els baselines, validant l'eficàcia de les features extretes durant el preprocessament.
+    \item Gradient Boosted Trees obté el millor F1-score (0.1063), indicant un millor equilibri entre precision i recall per a la classe minoritària.
+    \item Els AUC-ROC superiors a 0.70 demostren bona capacitat de discriminació entre classes.
+    \item Els resultats són consistents entre validació i test, confirmant bona generalització.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{../scripts/images/roc_curves.png}
+    \caption{Corbes ROC dels models entrenats}
+    \label{fig:roc_curves}
+\end{figure}
+
+\subsection{Selecció del model}
+
+\textbf{Criteri de selecció:} Hem utilitzat el \textbf{F1-score} com a mètrica principal per seleccionar el millor model, ja que equilibra precision i recall, cosa especialment important en datasets desequilibrats com el nostre (només l'1.4\% de les subvencions formen part de la llista de Cruz).
+
+\textbf{Model seleccionat:} Gradient Boosted Trees amb un F1-score de 0.1063 al conjunt de test.
+
+\textbf{Justificació:}
+\begin{itemize}
+    \item Millor F1-score entre tots els models, indicant millor detecció de la classe minoritària
+    \item AUC-ROC de 0.7159, demostrant bona capacitat de discriminació
+    \item Millora significativa respecte als baselines (F1 de 0.1063 vs 0.0488 del millor baseline)
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\textwidth]{../scripts/images/confusion_matrices.png}
+    \caption{Matrius de confusió dels models entrenats (conjunt de test)}
+    \label{fig:confusion_matrices}
+\end{figure}
+
+\textbf{Registre a MLflow:} El model seleccionat s'ha etiquetat com \texttt{best\_f1} a MLflow i està disponible per a desplegament. Els hiperparàmetres, mètriques i artefactes del model es poden consultar a l'experiment \texttt{nsf\_models\_flagged\_words} al directori \texttt{mlruns/}.
 \end{document}
