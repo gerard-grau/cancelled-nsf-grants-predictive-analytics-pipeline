@@ -50,17 +50,16 @@ A complete data engineering and predictive analytics pipeline for predicting NSF
 - **Python** 3.10 or higher
 - **Java** 11 or 17 (required for Spark)
 - **MongoDB** 6.0+ (running locally or remote)
-- **Git** (for cloning the repository)
 
 ---
 
 ## 🚀 Installation
 
-### 1. Clone the Repository
+### 1. Extract the ZIP File
 
 ```bash
-git clone https://github.com/gerard-grau/cancelled-nsf-grants-predictive-analytics-pipeline.git
-cd cancelled-nsf-grants-predictive-analytics-pipeline
+unzip Entrega_BDA_Gerard_Eloi.zip
+cd Entrega_BDA_Gerard_Eloi
 ```
 
 ### 2. Create Virtual Environment
@@ -81,11 +80,11 @@ pip install -r requirements.txt
 ### 4. Start MongoDB
 
 ```bash
-# Using Docker (recommended)
-docker run -d -p 27017:27017 --name mongodb mongo:6.0
-
-# Or start your local MongoDB service
+# Start your local MongoDB service
 sudo systemctl start mongod
+
+# Verify MongoDB is running
+mongosh --eval "db.runCommand({ ping: 1 })"
 ```
 
 ### 5. Configure Environment Variables (Optional)
@@ -105,9 +104,13 @@ export LOG_LEVEL="INFO"
 ## 📁 Project Structure
 
 ```
-cancelled-nsf-grants-predictive-analytics-pipeline/
+Entrega_BDA_Gerard_Eloi/
 │
-├── scripts/                    # Python scripts for all pipeline stages
+├── Documentation-BDA-Gerard-Grau-Eloi-Pagès.pdf  # Project report
+├── README.md                  # This file
+├── requirements.txt           # Python dependencies
+│
+├── scripts/                   # Python scripts for all pipeline stages
 │   ├── config.py              # Centralized configuration
 │   │
 │   ├── collect_awards.py      # Task A.3: NSF API data collector
@@ -127,21 +130,18 @@ cancelled-nsf-grants-predictive-analytics-pipeline/
 │   │
 │   ├── model_training_utils.py # Tasks B.1 & B.2: ML training + MLflow
 │   ├── model_training.ipynb   # Interactive model training notebook
-│   └── mlflow_visualization.ipynb # MLflow results visualization
+│   ├── mlflow_visualization.ipynb # MLflow results visualization
+│   └── *.sh                   # Shell scripts for execution
 │
 ├── airflow/
 │   └── dags/
 │       └── airflow_dag.py     # Tasks C.1 & C.2: Pipeline orchestration
 │
-├── datalake/
-│   ├── landing/               # Raw data files
-│   ├── formatted/             # MongoDB (external)
-│   └── exploitation/          # Delta tables
-│
-├── raw-data/                  # Source files (flagged words CSV)
-├── docs/                      # Project documentation
-└── requirements.txt           # Python dependencies
+└── raw-data/
+    └── flagged_words_trump_admin.csv  # Source data for flagged words
 ```
+
+> **Note:** The `datalake/` folder will be created automatically when running the pipeline.
 
 ---
 
@@ -296,8 +296,8 @@ collect_flagged_words ──► format_flagged_words ──┘
 # Check if MongoDB is running
 mongosh --eval "db.runCommand({ ping: 1 })"
 
-# Or with Docker
-docker ps | grep mongo
+# Start MongoDB if not running
+sudo systemctl start mongod
 ```
 
 ### Spark Java Error
@@ -330,6 +330,6 @@ This project was developed for educational purposes as part of the BDA course at
 ## 👥 Authors
 
 - **Gerard Grau**
-- **Eloi**
+- **Eloi Pagès**
 
 Course: Bases de Dades Avançades (BDA) - Universitat Politècnica de Catalunya
