@@ -58,8 +58,8 @@ A complete data engineering and predictive analytics pipeline for predicting NSF
 ### 1. Extract the ZIP File
 
 ```bash
-unzip Entrega_BDA_Gerard_Eloi.zip
-cd Entrega_BDA_Gerard_Eloi
+unzip "Team 11B_Entrega_BDA_Gerard_Eloi.zip"
+cd "Team 11B_Entrega_BDA_Gerard_Eloi"
 ```
 
 ### 2. Create Virtual Environment
@@ -104,9 +104,9 @@ export LOG_LEVEL="INFO"
 ## 📁 Project Structure
 
 ```
-Entrega_BDA_Gerard_Eloi/
+Team 11B_Entrega_BDA_Gerard_Eloi/
 │
-├── Documentation-BDA-Gerard-Grau-Eloi-Pagès.pdf  # Project report
+├── Team 11B_Documentation-BDA-Gerard-Grau-Eloi-Pagès.pdf  # Project report
 ├── README.md                  # This file
 ├── requirements.txt           # Python dependencies
 │
@@ -114,16 +114,16 @@ Entrega_BDA_Gerard_Eloi/
 │   ├── config.py              # Centralized configuration
 │   │
 │   ├── collect_awards.py      # Task A.3: NSF API data collector
-│   ├── collect_terminated.py  # Task A.3: Terminated grants collector
 │   ├── collect_cruz_list.py   # Task A.3: Cruz list collector
-│   ├── collect_legislators.py # Task A.3: Legislators collector
 │   ├── collect_flagged_words.py # Task A.3: Flagged words collector
+│   ├── collect_legislators.py # Task A.3: Legislators collector
+│   ├── collect_terminated.py  # Task A.3: Terminated grants collector
 │   │
 │   ├── format_awards.py       # Task A.4: NSF grants formatter
-│   ├── format_terminated.py   # Task A.4: Terminated grants formatter
 │   ├── format_cruz_list.py    # Task A.4: Cruz list formatter
-│   ├── format_legislators.py  # Task A.4: Legislators formatter
 │   ├── format_flagged_words.py # Task A.4: Flagged words formatter
+│   ├── format_legislators.py  # Task A.4: Legislators formatter
+│   ├── format_terminated.py   # Task A.4: Terminated grants formatter
 │   ├── formatter_utils.py     # Task A.4: Shared formatting utilities
 │   │
 │   ├── data_transformer.py    # Task A.5: MongoDB → Delta transformation
@@ -131,7 +131,8 @@ Entrega_BDA_Gerard_Eloi/
 │   ├── model_training_utils.py # Tasks B.1 & B.2: ML training + MLflow
 │   ├── model_training.ipynb   # Interactive model training notebook
 │   ├── mlflow_visualization.ipynb # MLflow results visualization
-│   └── *.sh                   # Shell scripts for execution
+│   ├── read_delta_files_utils.py  # Utility to read Delta tables
+│   └── test_execution.sh      # Shell script for testing execution
 │
 ├── airflow/
 │   └── dags/
