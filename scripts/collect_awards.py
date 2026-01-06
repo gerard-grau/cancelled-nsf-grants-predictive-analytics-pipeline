@@ -1,4 +1,15 @@
 # nsf_awards.py
+"""
+Task A.3 - PySpark Data Collector Pipeline: NSF Awards
+
+Collects NSF grant data from the public NSF API with support for:
+- Pagination handling for large datasets
+- Retry logic for transient failures  
+- Periodic execution (year-based collection)
+- Incremental or full data collection modes
+
+Data is stored in the Landing Zone as JSON files.
+"""
 
 import requests
 import json

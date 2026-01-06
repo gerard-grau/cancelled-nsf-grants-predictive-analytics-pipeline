@@ -1,4 +1,15 @@
 # format_cruz_list.py
+"""
+Task A.4 - PySpark Data Formatter Pipeline: Cruz List
+
+Reads raw Cruz list data from the Landing Zone and transforms it
+into a standardized format for storage in MongoDB (Formatted Zone).
+
+Transformations include:
+- Award ID extraction and normalization
+- Text field cleaning
+- Metadata enrichment
+"""
 
 import sys
 from datetime import datetime

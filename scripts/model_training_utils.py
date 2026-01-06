@@ -1,6 +1,16 @@
 """
-ML Experiment Manager for NSF Grant Prediction
-Handles model training with MLflow tracking and comprehensive metrics for imbalanced datasets.
+Task B.1 - PySpark Model Training and Validation
+Task B.2 - MLflow Model Management
+
+ML Experiment Manager for NSF Grant Prediction.
+
+Implements:
+- Multiple classification algorithms (Logistic Regression, Random Forest, GBT)
+- Cross-validation with hyperparameter tuning
+- Class weighting for imbalanced datasets
+- Comprehensive metrics: accuracy, precision, recall, F1, AUC-ROC, AUC-PR
+- MLflow integration for experiment tracking and model versioning
+- Automatic best model selection and deployment tagging
 """
 
 from typing import Optional, Callable, Tuple

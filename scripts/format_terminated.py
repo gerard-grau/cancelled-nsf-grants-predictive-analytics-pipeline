@@ -1,4 +1,16 @@
 # format_terminated_grants.py
+"""
+Task A.4 - PySpark Data Formatter Pipeline: Terminated Grants
+
+Reads raw terminated grants data from the Landing Zone and transforms it
+into a standardized format for storage in MongoDB (Formatted Zone).
+
+Transformations include:
+- Schema standardization
+- Award ID extraction and normalization
+- Date parsing
+- Metadata enrichment
+"""
 
 import sys
 from datetime import datetime

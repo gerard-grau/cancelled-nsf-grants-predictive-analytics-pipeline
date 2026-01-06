@@ -1,4 +1,15 @@
 # format_flagged_words.py
+"""
+Task A.4 - PySpark Data Formatter Pipeline: Flagged Words
+
+Reads raw flagged words data from the Landing Zone and transforms it
+into a standardized format for storage in MongoDB (Formatted Zone).
+
+Transformations include:
+- Text normalization (lowercasing, trimming)
+- Category assignment
+- Metadata enrichment
+"""
 
 import sys
 from datetime import datetime

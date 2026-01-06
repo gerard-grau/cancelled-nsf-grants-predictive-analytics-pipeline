@@ -1,4 +1,13 @@
 # collect_flagged_words.py
+"""
+Task A.3 - PySpark Data Collector Pipeline: Flagged Words
+
+Collects the list of flagged words/phrases from the Trump administration
+that are used to identify potentially controversial grant topics.
+
+Source: Local CSV file with curated list of flagged terms.
+Data is stored in the Landing Zone as CSV files.
+"""
 
 import shutil
 from pathlib import Path

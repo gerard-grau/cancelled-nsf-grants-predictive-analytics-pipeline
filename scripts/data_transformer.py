@@ -1,3 +1,18 @@
+"""
+Task A.5 - PySpark Pipeline: Formatted Zone → Exploitation Zone
+
+Transforms and joins data from MongoDB (Formatted Zone) into
+analysis-ready Delta tables in the Exploitation Zone.
+
+Key transformations:
+- Joins NSF grants with terminated grants, Cruz list, and legislators
+- Feature engineering: flagged word analysis, geographic features
+- Train/test split creation for ML pipeline
+- Delta table partitioning by year for efficient querying
+
+Output: Delta tables ready for model training (Task B.1)
+"""
+
 import sys
 from pathlib import Path
 from typing import Optional

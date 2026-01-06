@@ -1,4 +1,16 @@
 # format_nsf_grants.py
+"""
+Task A.4 - PySpark Data Formatter Pipeline: NSF Awards
+
+Reads raw NSF award data from the Landing Zone and transforms it into
+a standardized format for storage in MongoDB (Formatted Zone).
+
+Transformations include:
+- Schema standardization and type casting
+- Date parsing and formatting
+- Null value handling
+- Metadata enrichment (ingestion timestamp)
+"""
 
 import sys
 from datetime import datetime

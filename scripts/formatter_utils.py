@@ -1,4 +1,16 @@
 # formatter_utils.py
+"""
+Task A.4 - Data Formatter Utilities
+
+Shared utilities for all formatter pipelines including:
+- MongoDBManager: Connection management and batch operations
+- FormatterConfig: Configuration dataclass for formatters
+- generic_formatter: Reusable formatting pipeline template
+- Spark session creation with MongoDB connector
+
+This module follows DRY principles to avoid code duplication
+across individual formatter scripts.
+"""
 
 import sys
 from datetime import datetime

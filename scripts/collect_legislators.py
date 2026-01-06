@@ -1,4 +1,13 @@
 # legislators.py
+"""
+Task A.3 - PySpark Data Collector Pipeline: Legislators
+
+Collects current and historical U.S. legislators data from the
+unitedstates/congress-legislators GitHub repository (JSON format).
+
+This dataset is used to enrich grant data with political context.
+Data is stored in the Landing Zone as JSON files.
+"""
 
 import requests
 import json

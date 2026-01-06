@@ -1,4 +1,16 @@
 # format_legislators.py
+"""
+Task A.4 - PySpark Data Formatter Pipeline: Legislators
+
+Reads raw legislators data from the Landing Zone and transforms it
+into a standardized format for storage in MongoDB (Formatted Zone).
+
+Transformations include:
+- Nested JSON flattening
+- Schema standardization
+- Party and state extraction
+- Metadata enrichment
+"""
 
 import sys
 from datetime import datetime

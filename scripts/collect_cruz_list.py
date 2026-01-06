@@ -1,4 +1,13 @@
 # cruz_list.py
+"""
+Task A.3 - PySpark Data Collector Pipeline: Cruz List
+
+Collects the Senator Ted Cruz's list of "wasteful" NSF grants from
+the U.S. Senate website (Excel format).
+
+This dataset is used to identify politically flagged grants.
+Data is stored in the Landing Zone as CSV files.
+"""
 
 import requests
 from pathlib import Path

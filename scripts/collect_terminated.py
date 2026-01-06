@@ -1,4 +1,12 @@
 # terminated_data.py
+"""
+Task A.3 - PySpark Data Collector Pipeline: Terminated Grants
+
+Collects terminated NSF grants data from TidyTuesday GitHub repository.
+This dataset contains information about grants that were terminated by NSF.
+
+Data is stored in the Landing Zone as CSV files.
+"""
 
 from pathlib import Path
 from typing import Union

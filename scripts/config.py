@@ -1,12 +1,22 @@
 """
-Configuration module for MongoDB connection and project settings.
+Configuration Module
+
+Centralized configuration for the entire project.
 Supports environment variables for flexible deployment.
+
+Used by all tasks (A.3, A.4, A.5, B.1, B.2) for:
+- MongoDB connection settings
+- File paths (Landing, Formatted, Exploitation zones)
+- Spark configuration
+- Collection names
+
+Note: No hardcoded credentials - uses environment variables.
 """
 import os
 from pathlib import Path
 
 # MongoDB Configuration
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://172.27.160.1:27017/")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 MONGO_DB = os.getenv("MONGO_DB", "nsf_grants_formatted")
 
 # Collections

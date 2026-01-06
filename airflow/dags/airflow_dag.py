@@ -1,3 +1,22 @@
+"""
+Task C.1 - Airflow Scheduling
+Task C.2 - Airflow Task Dependency Management (Control Flow)
+
+Orchestrates the complete data pipeline using Apache Airflow:
+
+C.1 - Scheduling:
+- Daily execution schedule (@daily)
+- Configurable start date and catchup behavior
+
+C.2 - Dependencies (DAG structure):
+- Data collectors run in parallel (collect_*)
+- Formatters depend on their respective collectors
+- Data transformer runs after all formatters complete
+- Model training runs after data transformation
+
+Includes retry configuration for transient failures.
+"""
+
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
